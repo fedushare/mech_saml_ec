@@ -52,11 +52,13 @@ GSSEAP_ONCE_CALLBACK(gssEapAttrProvidersInitInternal)
 
     GSSEAP_ASSERT(gssEapAttrProvidersInitStatus == GSS_S_UNAVAILABLE);
 
+#ifdef MECH_EAP
     json_set_alloc_funcs(GSSEAP_MALLOC, GSSEAP_FREE);
 
     major = gssEapRadiusAttrProviderInit(&minor);
     if (GSS_ERROR(major))
         goto cleanup;
+#endif
 
 #ifdef HAVE_OPENSAML
     major = gssEapSamlAttrProvidersInit(&minor);
@@ -100,7 +102,9 @@ gssEapAttrProvidersFinalize(OM_uint32 *minor)
 #ifdef HAVE_OPENSAML
         gssEapSamlAttrProvidersFinalize(minor);
 #endif
+#ifdef MECH_EAP
         gssEapRadiusAttrProviderFinalize(minor);
+#endif
 
         gssEapAttrProvidersInitStatus = GSS_S_UNAVAILABLE;
     }
@@ -287,6 +291,7 @@ gss_eap_attr_ctx::initWithGssContext(const gss_cred_id_t cred,
     return ret;
 }
 
+#ifdef MECH_EAP
 bool
 gss_eap_attr_ctx::initWithJsonObject(JSONObject &obj)
 {
@@ -379,6 +384,7 @@ gss_eap_attr_ctx::jsonRepresentation(void) const
 
     return obj;
 }
+#endif
 
 /*
  * Initialize a context from an exported context or name token
@@ -389,16 +395,20 @@ gss_eap_attr_ctx::initWithBuffer(const gss_buffer_t buffer)
     OM_uint32 major, minor;
     bool ret;
     char *s;
+#ifdef MECH_EAP
     json_error_t error;
+#endif
 
     major = bufferToString(&minor, buffer, &s);
     if (GSS_ERROR(major))
         return false;
 
+#ifdef MECH_EAP
     JSONObject obj = JSONObject::load(s, 0, &error);
     if (!obj.isNull()) {
         ret = initWithJsonObject(obj);
     } else
+#endif
         ret = false;
 
     GSSEAP_FREE(s);
@@ -637,15 +647,21 @@ void
 gss_eap_attr_ctx::exportToBuffer(gss_buffer_t buffer) const
 {
     OM_uint32 minor;
+#ifdef MECH_EAP
     char *s;
 
     JSONObject obj = jsonRepresentation();
+#else
+    char *s = strdup("REPLACE_FOR_ECP");
+#endif
 
 #if 0
     obj.dump(stdout);
 #endif
 
+#ifdef MECH_EAP
     s = obj.dump(JSON_COMPACT);
+#endif
 
     if (GSS_ERROR(makeStringBuffer(&minor, s, buffer)))
         throw std::bad_alloc();
@@ -689,12 +705,16 @@ gss_eap_attr_ctx::mapException(OM_uint32 *minor, std::exception &e) const
         major = GSS_S_FAILURE;
         *minor = ENOMEM;
         goto cleanup;
+#ifdef MECH_EAP
     } else if (typeid(e) == typeid(JSONException)) {
         major = GSS_S_BAD_NAME;
         *minor = GSSEAP_BAD_ATTR_TOKEN;
         gssEapSaveStatusInfo(*minor, "%s", e.what());
         goto cleanup;
     }
+#else
+    }
+#endif
 
     /* Errors we delegate to providers */
     major = GSS_S_CONTINUE_NEEDED;

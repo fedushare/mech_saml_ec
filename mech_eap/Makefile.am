@@ -35,20 +35,20 @@ mech_eap_la_DEPENDENCIES = $(GSSEAP_EXPORTS)
 
 mech_eap_la_CPPFLAGS = -DBUILD_GSSEAP_LIB -DSYSCONFDIR=\"${sysconfdir}\" -DDATAROOTDIR=\"${datarootdir}\"
 mech_eap_la_CFLAGS   += \
-			@KRB5_CFLAGS@ @RADSEC_CFLAGS@ @TARGET_CFLAGS@ $(EAP_CFLAGS)
+			@KRB5_CFLAGS@ @TARGET_CFLAGS@ $(EAP_CFLAGS)
 mech_eap_la_CXXFLAGS += \
-			@KRB5_CFLAGS@ @RADSEC_CFLAGS@ \
+			@KRB5_CFLAGS@ \
 		        @OPENSAML_CXXFLAGS@ @SHIBRESOLVER_CXXFLAGS@ @SHIBSP_CXXFLAGS@ \
 			@TARGET_CFLAGS@ $(EAP_CFLAGS)
 mech_eap_la_LDFLAGS  = -avoid-version -module \
 			-export-symbols $(GSSEAP_EXPORTS) -no-undefined \
-			@KRB5_LDFLAGS@ @RADSEC_LDFLAGS@ @TARGET_LDFLAGS@
+			@KRB5_LDFLAGS@ @TARGET_LDFLAGS@
 if TARGET_WINDOWS
 mech_eap_la_LDFLAGS += -debug
 endif
 
-mech_eap_la_LIBADD   = @KRB5_LIBS@ ../libeap/libeap.la @RADSEC_LIBS@ \
-		       @OPENSAML_LIBS@ @SHIBRESOLVER_LIBS@ @SHIBSP_LIBS@ @JANSSON_LIBS@
+mech_eap_la_LIBADD   = @KRB5_LIBS@ ../libeap/libeap.la \
+		       @OPENSAML_LIBS@ @SHIBRESOLVER_LIBS@ @SHIBSP_LIBS@
 mech_eap_la_SOURCES =    			\
 	acquire_cred.c				\
 	acquire_cred_with_password.c		\
@@ -119,8 +119,6 @@ mech_eap_la_SOURCES =    			\
 	util_attr.h \
 	util_base64.h \
 	util.h \
-	util_json.h \
-	util_radius.h \
 	util_reauth.h \
 	util_saml.h \
 	util_shib.h
@@ -145,9 +143,7 @@ mech_eap_la_SOURCES +=				\
 	release_any_name_mapping.c		\
 	set_name_attribute.c			\
 	util_attr.cpp				\
-	util_base64.c				\
-	util_json.cpp				\
-	util_radius.cpp
+	util_base64.c				
 
 if OPENSAML
 mech_eap_la_SOURCES += util_saml.cpp
@@ -169,7 +165,7 @@ krb5pluginsdir = $(libdir)/krb5/plugins/authdata
 krb5plugins_LTLIBRARIES = radius_ad.la
 
 radius_ad_la_CFLAGS  = -Werror -Wall -Wunused-parameter \
-			@KRB5_CFLAGS@ $(EAP_CFLAGS) @RADSEC_CFLAGS@ @TARGET_CFLAGS@
+			@KRB5_CFLAGS@ $(EAP_CFLAGS) @TARGET_CFLAGS@
 radius_ad_la_LDFLAGS = -avoid-version -module \
 		       -export-symbols radius_ad.exports -no-undefined
 radius_ad_la_LIBADD  = @KRB5_LIBS@

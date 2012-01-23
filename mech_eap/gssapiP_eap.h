@@ -97,14 +97,18 @@ extern "C" {
 #define operator fr_operator
 #endif
 #endif
+#ifdef MECH_EAP
 #include <freeradius/libradius.h>
 #include <freeradius/radius.h>
+#endif
 
 #undef pid_t
 
+#ifdef MECH_EAP
 /* libradsec headers */
 #include <radsec/radsec.h>
 #include <radsec/request.h>
+#endif
 #ifdef __cplusplus
 #ifndef WIN32
 #undef operator
@@ -114,7 +118,9 @@ extern "C" {
 #endif /* GSSEAP_ENABLE_ACCEPTOR */
 
 #include "gsseap_err.h"
+#ifdef MECH_EAP
 #include "radsec_err.h"
+#endif
 #include "util.h"
 
 #ifdef __cplusplus
@@ -208,7 +214,9 @@ struct gss_eap_acceptor_ctx {
     struct rs_connection *radConn;
     char *radServer;
     gss_buffer_desc state;
+#ifdef MECH_EAP
     VALUE_PAIR *vps;
+#endif
 };
 #endif
 

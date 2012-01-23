@@ -173,7 +173,9 @@ gssEapInitiatorInit(OM_uint32 *minor)
     OM_uint32 major;
 
     initialize_eapg_error_table();
+#ifdef MECH_EAP
     initialize_rse_error_table();
+#endif
 
     major = gssEapInitLibEap(minor);
     if (GSS_ERROR(major))

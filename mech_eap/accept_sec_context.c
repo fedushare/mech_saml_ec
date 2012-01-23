@@ -52,6 +52,7 @@ eapGssSmAcceptGssReauth(OM_uint32 *minor,
                         OM_uint32 *smFlags);
 #endif
 
+#if MECH_EAP
 /*
  * Mark an acceptor context as ready for cryptographic operations
  */
@@ -129,6 +130,7 @@ acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
     *minor = 0;
     return GSS_S_COMPLETE;
 }
+#endif
 
 static OM_uint32
 eapGssSmAcceptAcceptorName(OM_uint32 *minor,
@@ -236,6 +238,7 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
     return GSS_S_CONTINUE_NEEDED;
 }
 
+#ifdef MECH_EAP
 /*
  * Returns TRUE if the input token contains an EAP identity response.
  */
@@ -448,7 +451,9 @@ createRadiusHandle(OM_uint32 *minor,
     *minor = 0;
     return GSS_S_COMPLETE;
 }
+#endif
 
+#ifdef MECH_EAP
 /*
  * Process a EAP response from the initiator.
  */
@@ -591,6 +596,7 @@ cleanup:
 
     return major;
 }
+#endif
 
 static OM_uint32
 eapGssSmAcceptGssFlags(OM_uint32 *minor,
@@ -789,6 +795,7 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
         SM_ITOK_FLAG_REQUIRED,
         eapGssSmAcceptIdentity,
     },
+#ifdef MECH_EAP
     {
         ITOK_TYPE_EAP_RESP,
         ITOK_TYPE_EAP_REQ,
@@ -796,6 +803,7 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
         SM_ITOK_FLAG_REQUIRED,
         eapGssSmAcceptAuthenticate
     },
+#endif
     {
         ITOK_TYPE_GSS_FLAGS,
         ITOK_TYPE_NONE,

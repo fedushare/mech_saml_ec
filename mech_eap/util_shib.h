@@ -78,9 +78,11 @@ public:
 
     const char *prefix(void) const;
     const char *name(void) const;
+#ifdef MECH_EAP
     bool initWithJsonObject(const gss_eap_attr_ctx *manager,
                             JSONObject &obj);
     JSONObject jsonRepresentation(void) const;
+#endif
 
     static bool init(void);
     static void finalize(void);

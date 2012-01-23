@@ -41,7 +41,9 @@
 #include <string>
 #include <new>
 
+#ifdef MECH_EAP
 using namespace gss_eap_util;
+#endif
 
 struct gss_eap_attr_provider;
 struct gss_eap_attr_ctx;
@@ -143,6 +145,7 @@ public:
         return NULL;
     }
 
+#ifdef MECH_EAP
     virtual bool initWithJsonObject(const gss_eap_attr_ctx *manager,
                                     JSONObject &object GSSEAP_UNUSED)
     {
@@ -154,6 +157,7 @@ public:
     {
         return JSONObject::null();
     }
+#endif
 
     virtual time_t getExpiryTime(void) const { return 0; }
 
@@ -256,8 +260,10 @@ private:
     unsigned int attributePrefixToType(const gss_buffer_t prefix) const;
     gss_buffer_desc attributeTypeToPrefix(unsigned int type) const;
 
+#ifdef MECH_EAP
     bool initWithJsonObject(JSONObject &object);
     JSONObject jsonRepresentation(void) const;
+#endif
 
     gss_eap_attr_provider *getPrimaryProvider(void) const;
 
@@ -271,7 +277,9 @@ private:
 
 #endif /* __cplusplus */
 
+#ifdef MECH_EAP
 #include "util_radius.h"
+#endif
 #include "util_saml.h"
 #include "util_shib.h"
 

@@ -61,7 +61,9 @@
 
 #include <shibsp/exceptions.h>
 #include <shibsp/attribute/SimpleAttribute.h>
+#ifdef MECH_EAP
 #include <shibsp/attribute/BinaryAttribute.h>
+#endif
 #include <shibsp/attribute/ScopedAttribute.h>
 #include <shibresolver/resolver.h>
 
@@ -147,7 +149,9 @@ gss_eap_shib_attr_provider::initWithGssContext(const gss_eap_attr_ctx *manager,
                                      EXPORT_NAME_FLAG_OID |
                                      EXPORT_NAME_FLAG_COMPOSITE);
     if (major == GSS_S_COMPLETE) {
+#ifdef MECH_EAP
         resolver->addToken(&mechName);
+#endif
         gss_release_buffer(&minor, &mechName);
     }
 
@@ -224,17 +228,23 @@ gss_eap_shib_attr_provider::setAttribute(int complete GSSEAP_UNUSED,
 {
     string attrStr((char *)attr->value, attr->length);
     vector <string> ids(1, attrStr);
+#ifdef MECH_EAP
     BinaryAttribute *a = new BinaryAttribute(ids);
+#endif
 
     GSSEAP_ASSERT(m_initialized);
 
     if (value->length != 0) {
         string valueStr((char *)value->value, value->length);
 
+#ifdef MECH_EAP
         a->getValues().push_back(valueStr);
+#endif
     }
 
+#ifdef MECH_EAP
     m_attributes.push_back(a);
+#endif
     m_authenticated = false;
 
     return true;
@@ -314,7 +324,9 @@ gss_eap_shib_attr_provider::getAttribute(const gss_buffer_t attr,
                                          int *more) const
 {
     const Attribute *shibAttr = NULL;
+#ifdef MECH_EAP
     const BinaryAttribute *binaryAttr;
+#endif
     gss_buffer_desc valueBuf = GSS_C_EMPTY_BUFFER;
     gss_buffer_desc displayValueBuf = GSS_C_EMPTY_BUFFER;
     int nvalues, i = *more;
@@ -334,6 +346,7 @@ gss_eap_shib_attr_provider::getAttribute(const gss_buffer_t attr,
     if (i >= nvalues)
         return false;
 
+#ifdef MECH_EAP
     binaryAttr = dynamic_cast<const BinaryAttribute *>(shibAttr);
     if (binaryAttr != NULL) {
         std::string str = binaryAttr->getValues()[*more];
@@ -341,6 +354,7 @@ gss_eap_shib_attr_provider::getAttribute(const gss_buffer_t attr,
         valueBuf.value = (void *)str.data();
         valueBuf.length = str.size();
     } else {
+#endif
         std::string str = shibAttr->getSerializedValues()[*more];
 
         valueBuf.value = (void *)str.c_str();
@@ -352,7 +366,9 @@ gss_eap_shib_attr_provider::getAttribute(const gss_buffer_t attr,
             dynamic_cast<const ScopedAttribute *>(shibAttr);
         if (simpleAttr != NULL || scopedAttr != NULL)
             displayValueBuf = valueBuf;
+#ifdef MECH_EAP
     }
+#endif
 
     if (authenticated != NULL)
         *authenticated = m_authenticated;
@@ -408,6 +424,7 @@ gss_eap_shib_attr_provider::name(void) const
     return "local";
 }
 
+#ifdef MECH_EAP
 JSONObject
 gss_eap_shib_attr_provider::jsonRepresentation(void) const
 {
@@ -458,6 +475,7 @@ gss_eap_shib_attr_provider::initWithJsonObject(const gss_eap_attr_ctx *ctx,
 
     return true;
 }
+#endif
 
 bool
 gss_eap_shib_attr_provider::init(void)

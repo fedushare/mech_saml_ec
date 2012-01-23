@@ -110,10 +110,14 @@ makeErrorToken(OM_uint32 *minor,
      * Only return error codes that the initiator could have caused,
      * to avoid information leakage.
      */
+#if MECH_EAP
     if (IS_RADIUS_ERROR(minorStatus)) {
         /* Squash RADIUS error codes */
         minorStatus = GSSEAP_RADIUS_PROT_FAILURE;
     } else if (!IS_WIRE_ERROR(minorStatus)) {
+#else
+    if (!IS_WIRE_ERROR(minorStatus)) {
+#endif
         /* Don't return non-wire error codes */
         return GSS_S_COMPLETE;
     }

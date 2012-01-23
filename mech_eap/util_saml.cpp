@@ -99,16 +99,19 @@ gss_eap_saml_assertion_provider::initWithGssContext(const gss_eap_attr_ctx *mana
                                                     const gss_cred_id_t gssCred,
                                                     const gss_ctx_id_t gssCtx)
 {
+#ifdef MECH_EAP
     const gss_eap_radius_attr_provider *radius;
     gss_buffer_desc value = GSS_C_EMPTY_BUFFER;
     int authenticated, complete;
     OM_uint32 minor;
+#endif
 
     GSSEAP_ASSERT(m_assertion == NULL);
 
     if (!gss_eap_attr_provider::initWithGssContext(manager, gssCred, gssCtx))
         return false;
 
+#ifdef MECH_EAP
     /*
      * XXX TODO we need to support draft-howlett-radius-saml-attr-00
      */
@@ -123,6 +126,7 @@ gss_eap_saml_assertion_provider::initWithGssContext(const gss_eap_attr_ctx *mana
     } else {
         m_assertion = NULL;
     }
+#endif
 
     return true;
 }

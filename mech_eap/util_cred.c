@@ -309,6 +309,7 @@ gssEapAcquireCred(OM_uint32 *minor,
 
 #ifdef GSSEAP_ENABLE_ACCEPTOR
     if (cred->flags & CRED_FLAG_ACCEPT) {
+#ifdef MECH_EAP
         struct rs_context *radContext;
 
         major = gssEapCreateRadiusContext(minor, cred, &radContext);
@@ -316,6 +317,7 @@ gssEapAcquireCred(OM_uint32 *minor,
             goto cleanup;
 
         rs_context_destroy(radContext);
+#endif
     }
 #endif
 

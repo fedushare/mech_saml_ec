@@ -88,6 +88,7 @@ releaseInitiatorContext(struct gss_eap_initiator_ctx *ctx)
 static void
 releaseAcceptorContext(struct gss_eap_acceptor_ctx *ctx)
 {
+#ifdef MECH_EAP
     OM_uint32 tmpMinor;
 
     if (ctx->radConn != NULL)
@@ -99,6 +100,9 @@ releaseAcceptorContext(struct gss_eap_acceptor_ctx *ctx)
     gss_release_buffer(&tmpMinor, &ctx->state);
     if (ctx->vps != NULL)
         gssEapRadiusFreeAvps(&tmpMinor, &ctx->vps);
+#else
+    ctx = ctx;
+#endif
 }
 #endif /* GSSEAP_ENABLE_ACCEPTOR */
 

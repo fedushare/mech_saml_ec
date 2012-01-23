@@ -1021,7 +1021,9 @@ gssEapDestroyKrbContext(krb5_context context);
 #endif
 
 #ifdef GSSEAP_ENABLE_ACCEPTOR
+#ifdef MECH_EAP
 #include "util_json.h"
+#endif
 #include "util_attr.h"
 #include "util_base64.h"
 #endif /* GSSEAP_ENABLE_ACCEPTOR */

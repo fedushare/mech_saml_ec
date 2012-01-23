@@ -81,11 +81,6 @@ if test x_$found_shibresolver = x_yes; then
   AX_CHECK_SHIBSP
 fi
 
-if test "x$acceptor" = "xyes" ; then
-  AX_CHECK_RADSEC
-  AX_CHECK_JANSSON
-fi
-
 AX_CHECK_LIBMOONSHOT
 AC_CONFIG_FILES([Makefile libeap/Makefile mech_eap/Makefile
 			  mech_eap.spec])
