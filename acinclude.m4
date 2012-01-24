@@ -157,7 +157,7 @@ if test x_$found_shibsp != x_yes; then
 else
 	printf "Shibboleth found in $shibspdir\n";
 	SHIBSP_LIBS="-lshibsp -lsaml -lxml-security-c -lxmltooling -lxerces-c";
-	SHIBSP_LDFLAGS="-L$shibspdir/lib";
+	SHIBSP_LDFLAGS="-L$shibspdir/lib -L$shibspdir/lib64";
 	AC_SUBST(SHIBSP_CXXFLAGS)
 	AC_SUBST(SHIBSP_LDFLAGS)
 	AC_SUBST(SHIBSP_LIBS)
@@ -200,7 +200,7 @@ if test x_$found_shibresolver != x_yes; then
 else
 	printf "Shibboleth resolver found in $shibresolverdir\n";
 	SHIBRESOLVER_LIBS="-lshibresolver";
-	SHIBRESOLVER_LDFLAGS="-L$shibresolverdir/lib";
+	SHIBRESOLVER_LDFLAGS="-L$shibresolverdir/lib -L$shibresolverdir/lib64";
 	AC_SUBST(SHIBRESOLVER_CXXFLAGS)
 	AC_SUBST(SHIBRESOLVER_LDFLAGS)
 	AC_SUBST(SHIBRESOLVER_LIBS)
@@ -243,7 +243,7 @@ if test x_$found_opensaml != x_yes; then
 else
 	printf "OpenSAML found in $opensamldir\n";
 	OPENSAML_LIBS="-lsaml -lxml-security-c -lxmltooling -lxerces-c";
-	OPENSAML_LDFLAGS="-L$opensamldir/lib";
+	OPENSAML_LDFLAGS="-L$opensamldir/lib -L$opensamldir/lib64";
 	AC_SUBST(OPENSAML_CXXFLAGS)
 	AC_SUBST(OPENSAML_LDFLAGS)
 	AC_SUBST(OPENSAML_LIBS)
