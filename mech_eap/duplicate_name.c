@@ -52,7 +52,11 @@ gss_duplicate_name(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&input_name->mutex);
 
+#ifdef MECH_EAP
     major = gssEapDuplicateName(minor, input_name, dest_name);
+#else
+    major = GSS_S_UNAVAILABLE;
+#endif
 
     GSSEAP_MUTEX_UNLOCK(&input_name->mutex);
 

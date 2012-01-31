@@ -187,6 +187,7 @@ gss_display_status(OM_uint32 *minor,
                    OM_uint32 *message_context,
                    gss_buffer_t status_string)
 {
+#ifdef MECH_EAP
     if (!gssEapIsMechanismOid(mech_type)) {
         *minor = GSSEAP_WRONG_MECH;
         return GSS_S_BAD_MECH;
@@ -200,4 +201,7 @@ gss_display_status(OM_uint32 *minor,
     }
 
     return gssEapDisplayStatus(minor, status_value, status_string);
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }

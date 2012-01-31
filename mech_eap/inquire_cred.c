@@ -53,7 +53,11 @@ gss_inquire_cred(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&cred->mutex);
 
+#ifdef MECH_EAP
     major = gssEapInquireCred(minor, cred, name, pLifetime, cred_usage, mechanisms);
+#else
+    major = GSS_S_UNAVAILABLE;
+#endif
 
     GSSEAP_MUTEX_UNLOCK(&cred->mutex);
 

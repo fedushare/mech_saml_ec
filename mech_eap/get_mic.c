@@ -43,6 +43,7 @@ gss_get_mic(OM_uint32 *minor,
             gss_buffer_t message_buffer,
             gss_buffer_t message_token)
 {
+#ifdef MECH_EAP
     OM_uint32 major;
     gss_iov_buffer_desc iov[2];
 
@@ -86,4 +87,7 @@ cleanup:
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 
     return major;
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }

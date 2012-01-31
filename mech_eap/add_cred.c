@@ -54,6 +54,7 @@ gss_add_cred(OM_uint32 *minor,
              OM_uint32 *initiator_time_rec,
              OM_uint32 *acceptor_time_rec)
 {
+#ifdef MECH_EAP
     OM_uint32 major;
     OM_uint32 time_req, time_rec = 0;
     gss_OID_set_desc mechs;
@@ -84,4 +85,7 @@ gss_add_cred(OM_uint32 *minor,
         *acceptor_time_rec = time_rec;
 
     return major;
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }

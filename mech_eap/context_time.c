@@ -58,7 +58,11 @@ gss_context_time(OM_uint32 *minor,
         goto cleanup;
     }
 
+#ifdef MECH_EAP
     major = gssEapContextTime(minor, ctx, time_rec);
+#else
+    major = GSS_S_UNAVAILABLE;
+#endif
     if (GSS_ERROR(major))
         goto cleanup;
 

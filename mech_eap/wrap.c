@@ -45,6 +45,7 @@ gss_wrap(OM_uint32 *minor,
          int *conf_state,
          gss_buffer_t output_message_buffer)
 {
+#ifdef MECH_EAP
     OM_uint32 major;
 
     if (ctx == GSS_C_NO_CONTEXT) {
@@ -72,6 +73,9 @@ cleanup:
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 
     return major;
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }
 
 OM_uint32

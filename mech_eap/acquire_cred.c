@@ -37,7 +37,7 @@
 #include "gssapiP_eap.h"
 
 OM_uint32 GSSAPI_CALLCONV
-gss_acquire_cred(OM_uint32 *minor,
+gss_acquire_cred(OM_uint32 * __attribute__ ((unused)) minor,
                  gss_name_t desired_name,
                  OM_uint32 time_req,
                  gss_OID_set desired_mechs,
@@ -46,7 +46,11 @@ gss_acquire_cred(OM_uint32 *minor,
                  gss_OID_set *actual_mechs,
                  OM_uint32 *time_rec)
 {
+#ifdef MECH_EAP
     return gssEapAcquireCred(minor, desired_name,
                              time_req, desired_mechs, cred_usage,
                              output_cred_handle, actual_mechs, time_rec);
+#else
+return GSS_S_UNAVAILABLE;
+#endif
 }

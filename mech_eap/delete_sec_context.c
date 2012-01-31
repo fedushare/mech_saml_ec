@@ -56,6 +56,7 @@ gss_delete_sec_context(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&ctx->mutex);
 
+#ifdef MECH_EAP
     if (output_token != GSS_C_NO_BUFFER) {
         gss_iov_buffer_desc iov[2];
 
@@ -74,6 +75,9 @@ gss_delete_sec_context(OM_uint32 *minor,
             return major;
         }
     }
+#else
+    major = GSS_S_COMPLETE;
+#endif
 
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 

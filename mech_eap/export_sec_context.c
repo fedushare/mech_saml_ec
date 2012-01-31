@@ -232,7 +232,11 @@ gss_export_sec_context(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&ctx->mutex);
 
+#ifdef MECH_EAP
     major = gssEapExportSecContext(minor, ctx, interprocess_token);
+#else
+    major = GSS_S_UNAVAILABLE;
+#endif
     if (GSS_ERROR(major)) {
         GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
         return major;

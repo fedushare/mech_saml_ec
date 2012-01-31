@@ -44,6 +44,7 @@ gss_wrap_size_limit(OM_uint32 *minor,
                     OM_uint32 req_output_size,
                     OM_uint32 *max_input_size)
 {
+#ifdef MECH_EAP
     gss_iov_buffer_desc iov[4];
     OM_uint32 major, overhead;
 
@@ -94,4 +95,7 @@ cleanup:
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 
     return major;
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }

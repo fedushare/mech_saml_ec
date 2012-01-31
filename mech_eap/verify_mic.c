@@ -43,6 +43,7 @@ gss_verify_mic(OM_uint32 *minor,
                gss_buffer_t message_token,
                gss_qop_t *qop_state)
 {
+#ifdef MECH_EAP
     OM_uint32 major;
     gss_iov_buffer_desc iov[3];
     int conf_state;
@@ -68,4 +69,7 @@ gss_verify_mic(OM_uint32 *minor,
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 
     return major;
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }

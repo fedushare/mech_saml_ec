@@ -345,6 +345,7 @@ gss_import_sec_context(OM_uint32 *minor,
                        gss_buffer_t interprocess_token,
                        gss_ctx_id_t *context_handle)
 {
+#ifdef MECH_EAP
     OM_uint32 major, tmpMinor;
     gss_ctx_id_t ctx = GSS_C_NO_CONTEXT;
 
@@ -371,4 +372,7 @@ cleanup:
         gssEapReleaseContext(&tmpMinor, &ctx);
 
     return major;
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }

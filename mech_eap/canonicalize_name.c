@@ -56,7 +56,11 @@ gss_canonicalize_name(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&input_name->mutex);
 
+#ifdef MECH_EAP
     major = gssEapCanonicalizeName(minor, input_name, mech_type, output_name);
+#else
+    major = GSS_S_UNAVAILABLE;
+#endif
 
     GSSEAP_MUTEX_UNLOCK(&input_name->mutex);
 

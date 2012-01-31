@@ -44,6 +44,7 @@ gss_unwrap(OM_uint32 *minor,
            int *conf_state,
            gss_qop_t *qop_state)
 {
+#ifdef MECH_EAP
     OM_uint32 major, tmpMinor;
     gss_iov_buffer_desc iov[2];
 
@@ -82,4 +83,7 @@ cleanup:
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 
     return major;
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }

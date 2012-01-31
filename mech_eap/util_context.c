@@ -67,6 +67,8 @@ gssEapAllocContext(OM_uint32 *minor,
      * to these services in the output of GSS_Init_sec_context and
      * GSS_Accept_sec_context.
     */
+/* VSY: Review the following; none applicable since we are only concerned
+ * with initial auth? */
     ctx->gssFlags = GSS_C_TRANS_FLAG    |   /* exporting contexts */
                     GSS_C_INTEG_FLAG    |   /* integrity */
                     GSS_C_CONF_FLAG     |   /* confidentiality */

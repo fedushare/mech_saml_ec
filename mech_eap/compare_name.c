@@ -42,5 +42,9 @@ gss_compare_name(OM_uint32 *minor,
                  gss_name_t name2,
                  int *name_equal)
 {
+#ifdef MECH_EAP
     return gssEapCompareName(minor, name1, name2, name_equal);
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }

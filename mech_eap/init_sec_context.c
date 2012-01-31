@@ -1074,6 +1074,7 @@ gss_init_sec_context(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&ctx->mutex);
 
+#ifdef MECH_EAP
     major = gssEapInitSecContext(minor,
                                  cred,
                                  ctx,
@@ -1087,6 +1088,52 @@ gss_init_sec_context(OM_uint32 *minor,
                                  output_token,
                                  ret_flags,
                                  time_rec);
+#else
+/* VSY: Cred delegation not supported in SAML EC, so GSS_C_DELEG_FLAG should be FALSE
+ * VSY: Per kitten, GSS_C_MUTUAL_FLAG is always set but it also says:
+ * "The mutual authentication property of this mechanism relies on
+ *  successfully comparing the TLS server identity with the negotiated
+ *  target name.  Since the TLS channel is managed by the application
+ *  outside of the GSS-API mechanism, the mechanism itself is unable to
+ *  confirm the name while the application is able to perform this
+ *  comparison for the mechanism.  For this reason, applications MUST
+ *  match the TLS server identity with the target name, as discussed in
+ *  [RFC6125]."
+ *  
+ *  Refer to "5.19. gss_init_sec_context" in RFC 2744 for performing the below.
+ *
+ *  if (input_token is null or empty)
+ *      generate output token as "OID+n,,", specifically
+ *      as "1.1.3.6.1.4.1.11591.4.6n,," in output token base64 encoded
+ *      return GSS_S_CONTINUE_NEEDED as major status
+ *  else
+ *      verify the input_token as a SOAP AuthnRequest
+ *      retain a copy of Relay State for later use
+ *      communicate SOAP body + basic auth header to the configured IdP
+ *      wait for reply back from IdP
+ *      In the SOAP reply received, replace relay state with one saved earlier
+ *      Prepare an output token with the previously altered SOAP reply
+ *      return GSS_S_COMPLETE as major status
+ *  else
+ *      return GSS_S_DEFECTIVE_TOKEN
+ *
+*/
+/* TODO: This should be base64 encoded */
+        if (input_token == GSS_C_NO_BUFFER || input_token->length == 0) {
+            /* TODO really should check for first invocation of this here */
+            /* TODO handle output_token == GSS_C_NO_BUFFER */
+            output_token->value = strdup("1.1.3.6.1.4.1.11591.4.6n,,");
+            output_token->length = strlen("1.1.3.6.1.4.1.11591.4.6n,,")+1;
+            major = GSS_S_CONTINUE_NEEDED;
+        } else if (!strcmp((char*)input_token->value, "SAML_AUTHREQUEST")) {
+            /* TODO obtain SAML assertion fro IdP */
+            output_token->value = strdup("SAML_ASSERTION_TO_SP");
+            output_token->length = strlen("SAML_ASSERTION_TO_SP")+1;
+            major=GSS_S_COMPLETE;
+        } else {
+            major = GSS_S_DEFECTIVE_TOKEN;
+        }
+#endif
 
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 
