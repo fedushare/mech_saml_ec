@@ -37,7 +37,7 @@
 #include "gssapiP_eap.h"
 
 OM_uint32 GSSAPI_CALLCONV
-gssspi_acquire_cred_with_password(OM_uint32 *minor,
+gss_acquire_cred_with_password(OM_uint32 *minor,
                                   const gss_name_t desired_name,
                                   const gss_buffer_t password,
                                   OM_uint32 time_req,

@@ -214,6 +214,7 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
         return GSS_S_DEFECTIVE_TOKEN;
     }
 
+#ifdef MECH_EAP
     reqData = eap_msg_alloc(EAP_VENDOR_IETF, EAP_TYPE_IDENTITY, 0,
                             EAP_CODE_REQUEST, 0);
     if (reqData == NULL) {
@@ -229,6 +230,7 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
         return major;
 
     wpabuf_free(reqData);
+#endif
 
     GSSEAP_SM_TRANSITION_NEXT(ctx);
 
@@ -1090,6 +1092,14 @@ gss_accept_sec_context(OM_uint32 *minor,
         } else if (!strcmp((char*)input_token->value, "SAML_ASSERTION_TO_SP")){
             /* TODO check SAML assertion */
             major=GSS_S_COMPLETE;
+        if (src_name != NULL) {
+           gss_buffer_desc name_buf;
+           name_buf.value = "imaclient";
+           name_buf.length = strlen(name_buf.value) + 1;
+
+            major = gssEapImportName(&tmpMinor, &name_buf, GSS_C_NT_USER_NAME,
+                              GSS_C_NO_OID, src_name);
+        }
         } else {
             major = GSS_S_DEFECTIVE_TOKEN;
         }

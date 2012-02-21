@@ -490,7 +490,11 @@ gssEapExportLucidSecContext(OM_uint32 *minor,
                             gss_buffer_set_t *data_set);
 
 /* util_mech.c */
+#ifdef MECH_EAP
 extern gss_OID GSS_EAP_MECHANISM;
+#else
+extern gss_OID GSS_SAMLEC_MECHANISM;
+#endif
 
 #define OID_FLAG_NULL_VALID                 0x00000001
 #define OID_FLAG_FAMILY_MECH_VALID          0x00000002

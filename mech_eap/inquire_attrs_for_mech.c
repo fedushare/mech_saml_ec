@@ -68,6 +68,7 @@ gss_inquire_attrs_for_mech(OM_uint32 *minor,
         if (GSS_ERROR(major))
             goto cleanup;
 
+#ifdef MECH_EAP
 #ifdef HAVE_GSS_INQUIRE_ATTRS_FOR_MECH
         if (oidEqual(mech_oid, GSS_EAP_MECHANISM))
             MA_SUPPORTED(GSS_C_MA_MECH_PSEUDO);
@@ -85,6 +86,7 @@ gss_inquire_attrs_for_mech(OM_uint32 *minor,
         MA_SUPPORTED(GSS_C_MA_OOS_DET);
         MA_SUPPORTED(GSS_C_MA_CBINDINGS);
         MA_SUPPORTED(GSS_C_MA_CTX_TRANS);
+#endif
 #endif
     }
 

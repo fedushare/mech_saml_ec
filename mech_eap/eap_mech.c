@@ -41,6 +41,7 @@ eapPeerRegisterMethods(OM_uint32 *minor)
 {
     OM_uint32 ret = 0;
 
+#ifdef MECH_EAP
 #ifdef EAP_MD5
     if (ret == 0)
         ret = eap_peer_md5_register();
@@ -50,7 +51,9 @@ eapPeerRegisterMethods(OM_uint32 *minor)
     if (ret == 0)
         ret = eap_peer_tls_register();
 #endif /* EAP_TLS */
+#endif /* MECH_EAP */
 
+#ifdef MECH_EAP
 #ifdef EAP_MSCHAPv2
     if (ret == 0)
         ret = eap_peer_mschapv2_register();
@@ -60,7 +63,9 @@ eapPeerRegisterMethods(OM_uint32 *minor)
     if (ret == 0)
         ret = eap_peer_peap_register();
 #endif /* EAP_PEAP */
+#endif /* EAP_PEAP */
 
+#ifdef MECH_EAP
 #ifdef EAP_TTLS
     if (ret == 0)
         ret = eap_peer_ttls_register();
@@ -75,12 +80,14 @@ eapPeerRegisterMethods(OM_uint32 *minor)
     if (ret == 0)
         ret = eap_peer_otp_register();
 #endif /* EAP_OTP */
+#endif /* EAP_OTP */
 
 #ifdef EAP_SIM
     if (ret == 0)
         ret = eap_peer_sim_register();
 #endif /* EAP_SIM */
 
+#ifdef MECH_EAP
 #ifdef EAP_LEAP
     if (ret == 0)
         ret = eap_peer_leap_register();
@@ -90,6 +97,7 @@ eapPeerRegisterMethods(OM_uint32 *minor)
     if (ret == 0)
         ret = eap_peer_psk_register();
 #endif /* EAP_PSK */
+#endif /* MECH_EAP */
 
 #ifdef EAP_AKA
     if (ret == 0)
@@ -106,6 +114,7 @@ eapPeerRegisterMethods(OM_uint32 *minor)
         ret = eap_peer_fast_register();
 #endif /* EAP_FAST */
 
+#ifdef MECH_EAP
 #ifdef EAP_PAX
     if (ret == 0)
         ret = eap_peer_pax_register();
@@ -120,6 +129,7 @@ eapPeerRegisterMethods(OM_uint32 *minor)
     if (ret == 0)
         ret = eap_peer_gpsk_register();
 #endif /* EAP_GPSK */
+#endif
 
 #ifdef EAP_WSC
     if (ret == 0)
@@ -203,7 +213,9 @@ gssEapFinalize(void)
 
     gssEapAttrProvidersFinalize(&minor);
 #endif
+#ifdef MECH_EAP
     eap_peer_unregister_methods();
+#endif
 }
 
 #ifdef GSSEAP_CONSTRUCTOR

@@ -557,7 +557,11 @@ gssEapExportNameInternal(OM_uint32 *minor,
     if (name->mechanismUsed != GSS_C_NO_OID)
         mech = name->mechanismUsed;
     else
+#ifdef MECH_EAP
         mech = GSS_EAP_MECHANISM;
+#else
+        mech = GSS_SAMLEC_MECHANISM;
+#endif
 
     major = gssEapDisplayName(minor, name, &nameBuf, NULL);
     if (GSS_ERROR(major))

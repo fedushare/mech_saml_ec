@@ -82,6 +82,6 @@ if test x_$found_shibresolver = x_yes; then
 fi
 
 AX_CHECK_LIBMOONSHOT
-AC_CONFIG_FILES([Makefile libeap/Makefile mech_eap/Makefile
-			  mech_eap.spec])
+AC_CONFIG_FILES([Makefile libeap/Makefile mech_eap/Makefile 
+			 gss-sample/Makefile mech_eap.spec])
 AC_OUTPUT

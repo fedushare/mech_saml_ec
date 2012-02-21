@@ -83,7 +83,9 @@ gssEapAllocContext(OM_uint32 *minor,
 static void
 releaseInitiatorContext(struct gss_eap_initiator_ctx *ctx)
 {
+#ifdef MECH_EAP
     eap_peer_sm_deinit(ctx->eap);
+#endif
 }
 
 #ifdef GSSEAP_ENABLE_ACCEPTOR

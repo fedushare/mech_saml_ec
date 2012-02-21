@@ -178,6 +178,7 @@ peerNotifyPending(void *ctx GSSEAP_UNUSED)
 {
 }
 
+#ifdef MECH_EAP
 static struct eapol_callbacks gssEapPolicyCallbacks = {
     peerGetConfig,
     peerGetBool,
@@ -189,6 +190,7 @@ static struct eapol_callbacks gssEapPolicyCallbacks = {
     peerGetConfigBlob,
     peerNotifyPending,
 };
+#endif
 
 #ifdef GSSEAP_DEBUG
 extern int wpa_debug_level;
@@ -284,6 +286,7 @@ peerConfigFree(OM_uint32 *minor,
     return GSS_S_COMPLETE;
 }
 
+#ifdef MECH_EAP
 /*
  * Mark an initiator context as ready for cryptographic operations
  */
@@ -291,8 +294,10 @@ static OM_uint32
 initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
 {
     OM_uint32 major;
+#ifdef MECH_EAP
     const unsigned char *key;
     size_t keyLength;
+#endif
 
 #if 1
     /* XXX actually check for mutual auth */
@@ -305,6 +310,7 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
     if (GSS_ERROR(major))
         return major;
 
+#ifdef MECH_EAP
     if (!eap_key_available(ctx->initiatorCtx.eap)) {
         *minor = GSSEAP_KEY_UNAVAILABLE;
         return GSS_S_UNAVAILABLE;
@@ -324,6 +330,7 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
                                    &ctx->rfc3961Key);
        if (GSS_ERROR(major))
            return major;
+#endif
 
     major = rfc3961ChecksumTypeForKey(minor, &ctx->rfc3961Key,
                                       &ctx->checksumType);
@@ -342,6 +349,7 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
     *minor = 0;
     return GSS_S_COMPLETE;
 }
+#endif
 
 static OM_uint32
 initBegin(OM_uint32 *minor,
@@ -616,10 +624,12 @@ eapGssSmInitIdentity(OM_uint32 *minor,
 
     memset(&eapConfig, 0, sizeof(eapConfig));
 
+#ifdef MECH_EAP
     ctx->initiatorCtx.eap = eap_peer_sm_init(ctx,
                                              &gssEapPolicyCallbacks,
                                              ctx,
                                              &eapConfig);
+#endif
     if (ctx->initiatorCtx.eap == NULL) {
         *minor = GSSEAP_PEER_SM_INIT_FAILURE;
         return GSS_S_FAILURE;
@@ -627,11 +637,13 @@ eapGssSmInitIdentity(OM_uint32 *minor,
 
     ctx->flags |= CTX_FLAG_EAP_RESTART | CTX_FLAG_EAP_PORT_ENABLED;
 
+#ifdef MECH_EAP
     /* poke EAP state machine */
     if (eap_peer_sm_step(ctx->initiatorCtx.eap) != 0) {
         *minor = GSSEAP_PEER_SM_STEP_FAILURE;
         return GSS_S_FAILURE;
     }
+#endif
 
     GSSEAP_SM_TRANSITION_NEXT(ctx);
 
@@ -675,6 +687,7 @@ eapGssSmInitAuthenticate(OM_uint32 *minor,
 
     major = GSS_S_CONTINUE_NEEDED;
 
+#ifdef MECH_EAP
     eap_peer_sm_step(ctx->initiatorCtx.eap);
     if (ctx->flags & CTX_FLAG_EAP_RESP) {
         ctx->flags &= ~(CTX_FLAG_EAP_RESP);
@@ -695,6 +708,7 @@ eapGssSmInitAuthenticate(OM_uint32 *minor,
         major = GSS_S_DEFECTIVE_TOKEN;
         *minor = GSSEAP_PEER_BAD_MESSAGE;
     }
+#endif
 
 cleanup:
     if (resp != NULL) {
@@ -1126,10 +1140,22 @@ gss_init_sec_context(OM_uint32 *minor,
             output_token->length = strlen("1.1.3.6.1.4.1.11591.4.6n,,")+1;
             major = GSS_S_CONTINUE_NEEDED;
         } else if (!strcmp((char*)input_token->value, "SAML_AUTHREQUEST")) {
+           gss_buffer_desc name_buf;
             /* TODO obtain SAML assertion fro IdP */
             output_token->value = strdup("SAML_ASSERTION_TO_SP");
             output_token->length = strlen("SAML_ASSERTION_TO_SP")+1;
             major=GSS_S_COMPLETE;
+
+           name_buf.value = "imaclient";
+           name_buf.length = strlen(name_buf.value) + 1;
+            major = gssEapImportName(&tmpMinor, &name_buf, GSS_C_NT_USER_NAME,
+                              GSS_C_NO_OID, &(ctx->initiatorName));
+
+           name_buf.value = "imaserver";
+           name_buf.length = strlen(name_buf.value) + 1;
+            major = gssEapImportName(&tmpMinor, &name_buf, GSS_C_NT_USER_NAME,
+                              GSS_C_NO_OID, &(ctx->acceptorName));
+
         } else {
             major = GSS_S_DEFECTIVE_TOKEN;
         }

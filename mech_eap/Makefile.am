@@ -28,11 +28,11 @@ mech_eap_la_CXXFLAGS = -Zi
 else
 EAP_CFLAGS += -DEAP_TLS -DEAP_PEAP -DEAP_TTLS -DEAP_MD5 -DEAP_MSCHAPv2 -DEAP_GTC -DEAP_OTP -DEAP_LEAP -DEAP_PSK -DEAP_PAX -DEAP_SAKE -DEAP_GPSK -DEAP_GPSK_SHA256 -DEAP_SERVER_IDENTITY -DEAP_SERVER_TLS -DEAP_SERVER_PEAP -DEAP_SERVER_TTLS -DEAP_SERVER_MD5 -DEAP_SERVER_MSCHAPV2 -DEAP_SERVER_GTC -DEAP_SERVER_PSK -DEAP_SERVER_PAX -DEAP_SERVER_SAKE -DEAP_SERVER_GPSK -DEAP_SERVER_GPSK_SHA256 -DIEEE8021X_EAPOL
 OS_LIBS =
-###VSY: for now no errors for unused parameters
+###VSY: for now no errors for unused parameters and variables
 ###mech_eap_la_CFLAGS   = -Werror -Wall -Wunused-parameter
 ###mech_eap_la_CXXFLAGS = -Werror -Wall -Wunused-parameter
-mech_eap_la_CFLAGS   = -Werror -Wall
-mech_eap_la_CXXFLAGS = -Werror -Wall
+mech_eap_la_CFLAGS   = -Wall -Wno-unused-variable
+mech_eap_la_CXXFLAGS = -Wall -Wno-unused-variable
 endif
 mech_eap_la_DEPENDENCIES = $(GSSEAP_EXPORTS)
 
@@ -51,7 +51,7 @@ if TARGET_WINDOWS
 mech_eap_la_LDFLAGS += -debug
 endif
 
-mech_eap_la_LIBADD   = ../libeap/libeap.la \
+mech_eap_la_LIBADD   = \
 		       @OPENSAML_LIBS@ @SHIBRESOLVER_LIBS@ @SHIBSP_LIBS@
 mech_eap_la_SOURCES =    			\
 	acquire_cred.c				\

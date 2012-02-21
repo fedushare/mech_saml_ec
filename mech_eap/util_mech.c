@@ -36,6 +36,7 @@
 
 #include "gssapiP_eap.h"
 
+#ifdef MECH_EAP
 /*
  * 1.3.6.1.4.1.5322(padl)
  *      gssEap(22)
@@ -67,6 +68,13 @@ static gss_OID_desc gssEapMechOids[] = {
 gss_OID GSS_EAP_MECHANISM                            = &gssEapMechOids[0];
 gss_OID GSS_EAP_AES128_CTS_HMAC_SHA1_96_MECHANISM    = &gssEapMechOids[1];
 gss_OID GSS_EAP_AES256_CTS_HMAC_SHA1_96_MECHANISM    = &gssEapMechOids[2];
+#else
+static gss_OID_desc gssEapMechOids[] = {
+    /* 1.3.6.1.4.1.11591.4.6  */
+    { 10, "\x2B\x06\x01\x04\x01\xDA\x47\x04\x06" },
+};
+gss_OID GSS_SAMLEC_MECHANISM                            = &gssEapMechOids[0];
+#endif
 
 static int
 internalizeOid(const gss_OID oid,
@@ -79,17 +87,29 @@ internalizeOid(const gss_OID oid,
 int
 gssEapIsConcreteMechanismOid(const gss_OID oid)
 {
+#ifdef MECH_EAP
     return oid->length > GSS_EAP_MECHANISM->length &&
            memcmp(oid->elements, GSS_EAP_MECHANISM->elements,
                   GSS_EAP_MECHANISM->length) == 0;
+#else
+    return oid->length > GSS_SAMLEC_MECHANISM->length &&
+           memcmp(oid->elements, GSS_SAMLEC_MECHANISM->elements,
+                  GSS_SAMLEC_MECHANISM->length) == 0;
+#endif
 }
 
 int
 gssEapIsMechanismOid(const gss_OID oid)
 {
+#ifdef MECH_EAP
     return oid == GSS_C_NO_OID ||
            oidEqual(oid, GSS_EAP_MECHANISM) ||
            gssEapIsConcreteMechanismOid(oid);
+#else
+    return oid == GSS_C_NO_OID ||
+           oidEqual(oid, GSS_SAMLEC_MECHANISM) ||
+           gssEapIsConcreteMechanismOid(oid);
+#endif
 }
 
 /*
@@ -128,8 +148,13 @@ gssEapOidToEnctype(OM_uint32 *minor,
     int suffix;
 
     major = decomposeOid(minor,
+#ifdef MECH_EAP
                          GSS_EAP_MECHANISM->elements,
                          GSS_EAP_MECHANISM->length,
+#else
+                         GSS_SAMLEC_MECHANISM->elements,
+                         GSS_SAMLEC_MECHANISM->length,
+#endif
                          oid,
                          &suffix);
     if (major == GSS_S_COMPLETE)
@@ -154,7 +179,11 @@ gssEapEnctypeToOid(OM_uint32 *minor,
         return GSS_S_FAILURE;
     }
 
+#ifdef MECH_EAP
     oid->length = GSS_EAP_MECHANISM->length + 1;
+#else
+    oid->length = GSS_SAMLEC_MECHANISM->length + 1;
+#endif
     oid->elements = GSSEAP_MALLOC(oid->length);
     if (oid->elements == NULL) {
         *minor = ENOMEM;
@@ -163,8 +192,13 @@ gssEapEnctypeToOid(OM_uint32 *minor,
     }
 
     major = composeOid(minor,
+#ifdef MECH_EAP
                        GSS_EAP_MECHANISM->elements,
                        GSS_EAP_MECHANISM->length,
+#else
+                       GSS_SAMLEC_MECHANISM->elements,
+                       GSS_SAMLEC_MECHANISM->length,
+#endif
                        enctype,
                        oid);
     if (major == GSS_S_COMPLETE) {
@@ -327,7 +361,11 @@ gssEapCanonicalizeOid(OM_uint32 *minor,
         } else {
             mapToNull = 1;
         }
+#ifdef MECH_EAP
     } else if (oidEqual(oid, GSS_EAP_MECHANISM)) {
+#else
+    } else if (oidEqual(oid, GSS_SAMLEC_MECHANISM)) {
+#endif
         if ((flags & OID_FLAG_FAMILY_MECH_VALID) == 0) {
             *minor = GSSEAP_WRONG_MECH;
             return GSS_S_BAD_MECH;
