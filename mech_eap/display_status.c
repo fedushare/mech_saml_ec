@@ -188,14 +188,20 @@ gss_display_status(OM_uint32 *minor,
                    gss_buffer_t status_string)
 {
     if (!gssEapIsMechanismOid(mech_type)) {
+        OM_uint32 tmpMinor;
         *minor = GSSEAP_WRONG_MECH;
+        /* Some apps expect status_string to be populated nevertheless */
+        makeStringBuffer(&tmpMinor, "WRONG ERROR", status_string);
         return GSS_S_BAD_MECH;
     }
 
     if (status_type != GSS_C_MECH_CODE ||
         *message_context != 0) {
+        OM_uint32 tmpMinor;
         /* we rely on the mechglue for GSS_C_GSS_CODE */
         *minor = 0;
+        /* Some apps expect status_string to be populated nevertheless */
+        makeStringBuffer(&tmpMinor, "", status_string);
         return GSS_S_BAD_STATUS;
     }
 
