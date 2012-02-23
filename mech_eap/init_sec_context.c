@@ -1144,7 +1144,6 @@ gss_init_sec_context(OM_uint32 *minor,
             /* TODO obtain SAML assertion fro IdP */
             output_token->value = strdup("SAML_ASSERTION_TO_SP");
             output_token->length = strlen("SAML_ASSERTION_TO_SP")+1;
-            major=GSS_S_COMPLETE;
 
            name_buf.value = "imaclient";
            name_buf.length = strlen(name_buf.value) + 1;
@@ -1155,6 +1154,11 @@ gss_init_sec_context(OM_uint32 *minor,
            name_buf.length = strlen(name_buf.value) + 1;
             major = gssEapImportName(&tmpMinor, &name_buf, GSS_C_NT_USER_NAME,
                               GSS_C_NO_OID, &(ctx->acceptorName));
+    major = gssEapCanonicalizeOid(minor,
+                                  GSS_SAMLEC_MECHANISM,
+                                  OID_FLAG_FAMILY_MECH_VALID,
+                                  &ctx->mechanismUsed);
+            major=GSS_S_COMPLETE;
 
         } else {
             major = GSS_S_DEFECTIVE_TOKEN;
