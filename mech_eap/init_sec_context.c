@@ -37,6 +37,8 @@
 
 #include "gssapiP_eap.h"
 
+#ifdef MECH_EAP
+
 static OM_uint32
 policyVariableToFlag(enum eapol_bool_var variable)
 {
@@ -178,7 +180,6 @@ peerNotifyPending(void *ctx GSSEAP_UNUSED)
 {
 }
 
-#ifdef MECH_EAP
 static struct eapol_callbacks gssEapPolicyCallbacks = {
     peerGetConfig,
     peerGetBool,
@@ -190,7 +191,6 @@ static struct eapol_callbacks gssEapPolicyCallbacks = {
     peerGetConfigBlob,
     peerNotifyPending,
 };
-#endif
 
 #ifdef GSSEAP_DEBUG
 extern int wpa_debug_level;
@@ -286,7 +286,6 @@ peerConfigFree(OM_uint32 *minor,
     return GSS_S_COMPLETE;
 }
 
-#ifdef MECH_EAP
 /*
  * Mark an initiator context as ready for cryptographic operations
  */
@@ -294,10 +293,8 @@ static OM_uint32
 initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
 {
     OM_uint32 major;
-#ifdef MECH_EAP
     const unsigned char *key;
     size_t keyLength;
-#endif
 
 #if 1
     /* XXX actually check for mutual auth */
@@ -310,7 +307,6 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
     if (GSS_ERROR(major))
         return major;
 
-#ifdef MECH_EAP
     if (!eap_key_available(ctx->initiatorCtx.eap)) {
         *minor = GSSEAP_KEY_UNAVAILABLE;
         return GSS_S_UNAVAILABLE;
@@ -330,7 +326,6 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
                                    &ctx->rfc3961Key);
        if (GSS_ERROR(major))
            return major;
-#endif
 
     major = rfc3961ChecksumTypeForKey(minor, &ctx->rfc3961Key,
                                       &ctx->checksumType);
@@ -622,14 +617,13 @@ eapGssSmInitIdentity(OM_uint32 *minor,
     GSSEAP_ASSERT((ctx->flags & CTX_FLAG_KRB_REAUTH) == 0);
     GSSEAP_ASSERT(inputToken == GSS_C_NO_BUFFER);
 
+#ifdef MECH_EAP
     memset(&eapConfig, 0, sizeof(eapConfig));
 
-#ifdef MECH_EAP
     ctx->initiatorCtx.eap = eap_peer_sm_init(ctx,
                                              &gssEapPolicyCallbacks,
                                              ctx,
                                              &eapConfig);
-#endif
     if (ctx->initiatorCtx.eap == NULL) {
         *minor = GSSEAP_PEER_SM_INIT_FAILURE;
         return GSS_S_FAILURE;
@@ -637,12 +631,13 @@ eapGssSmInitIdentity(OM_uint32 *minor,
 
     ctx->flags |= CTX_FLAG_EAP_RESTART | CTX_FLAG_EAP_PORT_ENABLED;
 
-#ifdef MECH_EAP
     /* poke EAP state machine */
     if (eap_peer_sm_step(ctx->initiatorCtx.eap) != 0) {
         *minor = GSSEAP_PEER_SM_STEP_FAILURE;
         return GSS_S_FAILURE;
     }
+#else
+    /* makeStringBuffer(minor, "n,,", outputToken); */
 #endif
 
     GSSEAP_SM_TRANSITION_NEXT(ctx);
@@ -673,6 +668,7 @@ eapGssSmInitAuthenticate(OM_uint32 *minor,
 
     GSSEAP_ASSERT(inputToken != GSS_C_NO_BUFFER);
 
+#ifdef MECH_EAP
     major = peerConfigInit(minor, ctx);
     if (GSS_ERROR(major))
         goto cleanup;
@@ -687,7 +683,6 @@ eapGssSmInitAuthenticate(OM_uint32 *minor,
 
     major = GSS_S_CONTINUE_NEEDED;
 
-#ifdef MECH_EAP
     eap_peer_sm_step(ctx->initiatorCtx.eap);
     if (ctx->flags & CTX_FLAG_EAP_RESP) {
         ctx->flags &= ~(CTX_FLAG_EAP_RESP);
@@ -708,7 +703,6 @@ eapGssSmInitAuthenticate(OM_uint32 *minor,
         major = GSS_S_DEFECTIVE_TOKEN;
         *minor = GSSEAP_PEER_BAD_MESSAGE;
     }
-#endif
 
 cleanup:
     if (resp != NULL) {
@@ -731,6 +725,18 @@ cleanup:
 
     wpabuf_set(&ctx->initiatorCtx.reqData, NULL, 0);
     peerConfigFree(&tmpMinor, ctx);
+#else
+    if (!strncmp(inputToken->value, "SAML_AUTHREQUEST", strlen("SAML_AUTHREQUEST")))
+    {
+         fprintf(stderr, "GSSAPI Initiator: Received SAML_AUTHREQUEST from Acceptor\n");
+         major = makeStringBuffer(minor, "SAML_ASSERTION_TO_SP", outputToken);
+    }
+
+    major = GSS_S_COMPLETE;
+
+    GSSEAP_SM_TRANSITION_NEXT(ctx);
+        *smFlags |= SM_FLAG_OUTPUT_TOKEN_CRITICAL;
+#endif
 
     return major;
 }
@@ -879,6 +885,7 @@ static struct gss_eap_sm eapGssInitiatorSm[] = {
         0,
         eapGssSmInitError
     },
+#ifdef MECH_EAP
     {
         ITOK_TYPE_ACCEPTOR_NAME_RESP,
         ITOK_TYPE_ACCEPTOR_NAME_REQ,
@@ -886,6 +893,7 @@ static struct gss_eap_sm eapGssInitiatorSm[] = {
         0,
         eapGssSmInitAcceptorName
     },
+#endif
 #ifdef GSSEAP_DEBUG
     {
         ITOK_TYPE_NONE,
@@ -906,7 +914,11 @@ static struct gss_eap_sm eapGssInitiatorSm[] = {
 #endif
     {
         ITOK_TYPE_NONE,
+#if 1 /* def MECH_EAP */
         ITOK_TYPE_NONE,
+#else
+        ITOK_TYPE_EAP_REQ,
+#endif
 #ifdef GSSEAP_ENABLE_REAUTH
         GSSEAP_STATE_REAUTHENTICATE |
 #endif
@@ -921,6 +933,7 @@ static struct gss_eap_sm eapGssInitiatorSm[] = {
         SM_ITOK_FLAG_REQUIRED,
         eapGssSmInitAuthenticate
     },
+#ifdef MECH_EAP
     {
         ITOK_TYPE_NONE,
         ITOK_TYPE_GSS_FLAGS,
@@ -959,6 +972,7 @@ static struct gss_eap_sm eapGssInitiatorSm[] = {
         SM_ITOK_FLAG_REQUIRED,
         eapGssSmInitAcceptorMIC
     }
+#endif
 };
 
 OM_uint32
@@ -1088,7 +1102,7 @@ gss_init_sec_context(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&ctx->mutex);
 
-#ifdef MECH_EAP
+#if 1 /* def MECH_EAP */
     major = gssEapInitSecContext(minor,
                                  cred,
                                  ctx,
@@ -1132,7 +1146,6 @@ gss_init_sec_context(OM_uint32 *minor,
  *      return GSS_S_DEFECTIVE_TOKEN
  *
 */
-/* TODO: This should be base64 encoded */
         if (input_token == GSS_C_NO_BUFFER || input_token->length == 0) {
             /* TODO really should check for first invocation of this here */
             /* TODO handle output_token == GSS_C_NO_BUFFER */

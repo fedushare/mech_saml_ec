@@ -668,6 +668,7 @@ sequenceInit(OM_uint32 *minor, void **vqueue, uint64_t seqnum,
 enum gss_eap_state {
     GSSEAP_STATE_INITIAL        = 0x01,     /* initial state */
     GSSEAP_STATE_AUTHENTICATE   = 0x02,     /* exchange EAP messages */
+#ifdef MECH_EAP
     GSSEAP_STATE_INITIATOR_EXTS = 0x04,     /* initiator extensions */
     GSSEAP_STATE_ACCEPTOR_EXTS  = 0x08,     /* acceptor extensions */
 #ifdef GSSEAP_ENABLE_REAUTH
@@ -675,6 +676,10 @@ enum gss_eap_state {
 #endif
     GSSEAP_STATE_ESTABLISHED    = 0x20,     /* context established */
     GSSEAP_STATE_ALL            = 0x3F
+#else
+    GSSEAP_STATE_ESTABLISHED    = 0x04,     /* context established */
+    GSSEAP_STATE_ALL            = 0x07
+#endif
 };
 
 #define GSSEAP_STATE_NEXT(s)    ((s) << 1)

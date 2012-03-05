@@ -230,6 +230,9 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
         return major;
 
     wpabuf_free(reqData);
+#else
+    major = makeStringBuffer(minor, "SAML_AUTHREQUEST", outputToken);
+    fprintf(stderr, "SENDING SAML_AUTHREQUEST\n");
 #endif
 
     GSSEAP_SM_TRANSITION_NEXT(ctx);
@@ -455,7 +458,6 @@ createRadiusHandle(OM_uint32 *minor,
 }
 #endif
 
-#ifdef MECH_EAP
 /*
  * Process a EAP response from the initiator.
  */
@@ -478,6 +480,7 @@ eapGssSmAcceptAuthenticate(OM_uint32 *minor,
     struct rs_packet *req = NULL, *resp = NULL;
     struct radius_packet *frreq, *frresp;
 
+#ifdef MECH_EAP
     if (ctx->acceptorCtx.radContext == NULL) {
         /* May be NULL from an imported partial context */
         major = createRadiusHandle(minor, cred, ctx);
@@ -595,10 +598,19 @@ cleanup:
         rs_conn_destroy(ctx->acceptorCtx.radConn);
         ctx->acceptorCtx.radConn = NULL;
     }
+#else
+    if (!strncmp(inputToken->value, "SAML_ASSERTION_TO_SP", strlen("SAML_ASSERTION_TO_SP")))
+    {
+         fprintf(stderr, "GSSAPI Acceptor: Received SAML_ASSERTION_TO_SP from initiator\n");
+    }
+
+        GSSEAP_SM_TRANSITION_NEXT(ctx);
+
+    major = GSS_S_COMPLETE;
+#endif
 
     return major;
 }
-#endif
 
 static OM_uint32
 eapGssSmAcceptGssFlags(OM_uint32 *minor,
@@ -765,6 +777,7 @@ eapGssSmAcceptAcceptorMIC(OM_uint32 *minor,
 }
 
 static struct gss_eap_sm eapGssAcceptorSm[] = {
+#ifdef MECH_EAP
     {
         ITOK_TYPE_ACCEPTOR_NAME_REQ,
         ITOK_TYPE_ACCEPTOR_NAME_RESP,
@@ -772,6 +785,7 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
         0,
         eapGssSmAcceptAcceptorName
     },
+#endif
 #ifdef GSSEAP_DEBUG
     {
         ITOK_TYPE_VENDOR_INFO,
@@ -791,13 +805,16 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
     },
 #endif
     {
+#if 1 /* def MECH_EAP */
         ITOK_TYPE_NONE,
+#else
+        ITOK_TYPE_EAP_REQ,
+#endif
         ITOK_TYPE_EAP_REQ,
         GSSEAP_STATE_INITIAL,
         SM_ITOK_FLAG_REQUIRED,
         eapGssSmAcceptIdentity,
     },
-#ifdef MECH_EAP
     {
         ITOK_TYPE_EAP_RESP,
         ITOK_TYPE_EAP_REQ,
@@ -805,7 +822,7 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
         SM_ITOK_FLAG_REQUIRED,
         eapGssSmAcceptAuthenticate
     },
-#endif
+#ifdef MECH_EAP
     {
         ITOK_TYPE_GSS_FLAGS,
         ITOK_TYPE_NONE,
@@ -843,6 +860,7 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
         0,
         eapGssSmAcceptAcceptorMIC
     },
+#endif
 };
 
 OM_uint32
@@ -1061,7 +1079,7 @@ gss_accept_sec_context(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&ctx->mutex);
 
-#ifdef MECH_EAP
+#if 1 /* def MECH_EAP */
     major = gssEapAcceptSecContext(minor,
                                    ctx,
                                    cred,
