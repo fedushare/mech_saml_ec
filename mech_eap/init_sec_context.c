@@ -37,6 +37,10 @@
 
 #include "gssapiP_eap.h"
 
+#include <libxml/xmlreader.h>
+#include <curl/curl.h>
+
+
 #ifdef MECH_EAP
 
 static OM_uint32
@@ -647,6 +651,144 @@ eapGssSmInitIdentity(OM_uint32 *minor,
     return GSS_S_CONTINUE_NEEDED;
 }
 
+
+static xmlNode *
+getElement(xmlNode *a_node, char *name)
+{
+    xmlNode *cur_node = NULL;
+    xmlNode *ret_node = NULL;
+
+    for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
+            printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, cur_node->content?(cur_node->content):"");
+        if (cur_node->type == XML_ELEMENT_NODE && !strcmp(cur_node->name, name)) {
+                return cur_node;
+        }
+
+        ret_node = getElement(cur_node->children, name);
+        if (ret_node)
+            return ret_node;
+    }
+    return NULL;
+}
+
+static void
+freeChildren(xmlNode *a_node)
+{
+    xmlNode *cur_node = NULL;
+
+    cur_node = a_node->children;
+    while (cur_node) {
+          xmlNode *next_node = cur_node->next;
+          xmlUnlinkNode(cur_node);
+          xmlFreeNode(cur_node);          cur_node = next_node;
+    }
+}
+
+char http_data[5096] = ""; /* TODO VSY Make this dynamic */
+
+size_t
+write_data(void *buffer, size_t size, size_t nmemb, void *userp)
+{
+    int numbytes = size * nmemb;
+    int http_len = strlen(http_data);
+
+    memcpy(http_data + http_len, buffer, numbytes);
+    http_data[http_len + numbytes] = '\0';
+
+    return numbytes;
+}
+
+void
+sendToIdP(xmlDocPtr doc, char *user, char *password)
+{
+    CURL *curl;
+    CURLcode res;
+    xmlChar *mem = NULL;
+    int size;
+    char userpw[514]; /* TODO VSY: fix this */
+
+    xmlDocDumpFormatMemory(doc, &mem, &size, 0);
+    fprintf(stderr, "FORMATTED DOC IS (%p)(%d)\n", mem, size);
+
+    curl = curl_easy_init();
+    if (curl && mem && size) {
+fprintf(stderr, "DOING HTTP POST\n");
+       /* TODO VSY: Use configured IdP */
+       curl_easy_setopt(curl, CURLOPT_URL, "https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP");
+
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+        curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+        sprintf(userpw, "%s:%s", user, password);
+        curl_easy_setopt(curl, CURLOPT_USERPWD, userpw);
+
+        curl_easy_setopt(curl, CURLOPT_POST, 1);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, mem);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, size);
+
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+
+        res = curl_easy_perform(curl);
+
+        /* always cleanup */
+        curl_easy_cleanup(curl);
+    }
+}
+
+
+char *
+processSAMLRequest(gss_cred_id_t cred, gss_buffer_t request)
+{
+    char *user = "ysvenkat"; /* TODO: grab this from cred */
+    char *password = cred->password.value;
+    xmlDocPtr doc_fromsp;
+    xmlDocPtr doc_fromidp;
+    xmlNode *header_fromsp;
+
+fprintf(stderr, "PASSWORD IS (%s)\n", password);
+
+    doc_fromsp = xmlReadMemory(request->value, request->length, "FROMSP", NULL, 0);
+    if (doc_fromsp != NULL)
+        xmlDocDump(stdout, doc_fromsp);
+    else
+        return NULL;
+
+    /* Exclude header */
+    header_fromsp = getElement(xmlDocGetRootElement(doc_fromsp), "Header");
+    xmlUnlinkNode(header_fromsp);
+    xmlDocDump(stdout, doc_fromsp);
+
+    /* Send doc to IdP */
+    /* TODO: Error checking here and elsewhere */
+    sendToIdP(doc_fromsp, user, password);
+
+fprintf(stdout, "RECEIVED FROM IDP (%s)\n", http_data);
+
+    /* Empty header from IdP and populate with RelayState from
+ *     header received from SP */
+    doc_fromidp = xmlReadMemory(http_data, strlen(http_data), "FROMIDP", NULL, 0);
+    if (doc_fromsp != NULL) {
+        char mem[5096]; /* TODO fix */
+        int size;
+        xmlNode *header_fromidp = NULL;
+        xmlNode *relay_state = NULL;
+        xmlDocDump(stdout, doc_fromidp);
+        header_fromidp = getElement(xmlDocGetRootElement(doc_fromidp), "Header");
+        freeChildren(header_fromidp);
+        relay_state = getElement(header_fromsp, "RelayState");
+
+        xmlAddChild(header_fromidp, xmlCopyNode(relay_state, 1));
+fprintf(stdout, "SENDING TO SP >>>>>>>>>>>>>>>>>>>\n");
+        xmlDocDump(stdout, doc_fromidp);
+        xmlDocDumpFormatMemory(doc_fromidp, &mem, &size, 0);
+        return strdup(mem);
+    }
+
+fprintf(stderr, "NULL RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
+    return NULL;
+}
+
 static OM_uint32
 eapGssSmInitAuthenticate(OM_uint32 *minor,
                          gss_cred_id_t cred GSSEAP_UNUSED,
@@ -663,6 +805,7 @@ eapGssSmInitAuthenticate(OM_uint32 *minor,
     OM_uint32 major;
     OM_uint32 tmpMinor;
     struct wpabuf *resp = NULL;
+    char *saml_response = NULL;
 
     *minor = 0;
 
@@ -726,11 +869,16 @@ cleanup:
     wpabuf_set(&ctx->initiatorCtx.reqData, NULL, 0);
     peerConfigFree(&tmpMinor, ctx);
 #else
+#if 0
     if (!strncmp(inputToken->value, "SAML_AUTHREQUEST", strlen("SAML_AUTHREQUEST")))
     {
          fprintf(stderr, "GSSAPI Initiator: Received SAML_AUTHREQUEST from Acceptor\n");
          major = makeStringBuffer(minor, "SAML_ASSERTION_TO_SP", outputToken);
     }
+#else
+    saml_response = processSAMLRequest(cred, inputToken);
+    major = makeStringBuffer(minor, saml_response?:"SAML_ASSERTION_IS_NULL", outputToken);
+#endif
 
     major = GSS_S_COMPLETE;
 

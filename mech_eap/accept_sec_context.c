@@ -182,6 +182,70 @@ eapGssSmAcceptVendorInfo(OM_uint32 *minor,
 }
 #endif
 
+#ifndef MECH_EAP
+char *saml_req_part1 = "<?xml version=\"1.0\"?>"
+"<S:Envelope"
+"  xmlns:S=\"http://schemas.xmlsoap.org/soap/envelope/\">"
+"    <S:Header>"
+"      <paos:Request"
+"        xmlns:paos=\"urn:liberty:paos:2003-08\""
+"         S:actor=\"http://schemas.xmlsoap.org/soap/actor/next\""
+"         S:mustUnderstand=\"1\""
+"         responseConsumerURL=\"https://test.cilogon.org/Shibboleth.sso/SAML2/ECP\""
+"         service=\"urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp\""
+"      />"
+"      <ecp:Request"
+"        xmlns:ecp=\"urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp\""
+"         IsPassive=\"0\""
+"         S:actor=\"http://schemas.xmlsoap.org/soap/actor/next\""
+"         S:mustUnderstand=\"1\">"
+"          <saml:Issuer"
+"            xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">"
+"              https://cilogon.org/shibboleth"
+"          </saml:Issuer>"
+"      </ecp:Request>"
+"      <ecp:RelayState"
+"        xmlns:ecp=\"urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp\""
+"        S:actor=\"http://schemas.xmlsoap.org/soap/actor/next\""
+"        S:mustUnderstand=\"1\">"
+"          cookie:24129bd5"
+"      </ecp:RelayState>"
+"    </S:Header>"
+"    <S:Body>"
+"        <samlp:AuthnRequest"
+"          xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\""
+"           AssertionConsumerServiceURL=\"https://test.cilogon.org/Shibboleth.sso/SAML2/ECP\""
+"           ID=\"";
+
+char *saml_req_part2 = "\" IssueInstant=\"";
+
+char *saml_req_part3 = "\" ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:PAOS\""
+"           Version=\"2.0\">"
+"            <saml:Issuer"
+"              xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">"
+"                https://cilogon.org/shibboleth"
+"            </saml:Issuer>"
+"            <samlp:NameIDPolicy"
+"              AllowCreate=\"1\""
+"             />"
+"        </samlp:AuthnRequest>"
+"    </S:Body>"
+"</S:Envelope>";
+#endif
+
+static char *
+getSAMLRequest()
+{
+    char *utc_time = "2012-03-06T15:17:21Z"; /* TODO: replace with real time */
+    char *id = "_893d6ce89d5da751180536d7a6b3b652"; /* TODO: real random id */
+
+    int len = strlen(saml_req_part1) + strlen(saml_req_part2) + strlen(saml_req_part3) + strlen(utc_time) + strlen(id)+1;
+    char *saml_req = NULL;
+
+    asprintf(&saml_req, "%s%s%s%s%s", saml_req_part1, id, saml_req_part2, utc_time, saml_req_part3);
+
+    return saml_req;
+}
 
 /*
  * Emit a identity EAP request to force the initiator (peer) to identify
@@ -203,6 +267,7 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
     OM_uint32 major;
     struct wpabuf *reqData;
     gss_buffer_desc pktBuffer;
+    char *saml_req;
 
     if (!gssEapCredAvailable(cred, ctx->mechanismUsed)) {
         *minor = GSSEAP_CRED_MECH_MISMATCH;
@@ -231,7 +296,9 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 
     wpabuf_free(reqData);
 #else
-    major = makeStringBuffer(minor, "SAML_AUTHREQUEST", outputToken);
+    /* major = makeStringBuffer(minor, "SAML_AUTHREQUEST", outputToken); */
+    saml_req = getSAMLRequest();
+    major = makeStringBuffer(minor, saml_req?:"", outputToken);
     fprintf(stderr, "SENDING SAML_AUTHREQUEST\n");
 #endif
 

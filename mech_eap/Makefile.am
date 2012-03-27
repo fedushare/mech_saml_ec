@@ -9,7 +9,9 @@ gssincludedir = $(includedir)/gssapi
 gssinclude_HEADERS = gssapi_eap.h
 
 EAP_CFLAGS = -I$(srcdir)/../libeap/src -I$(srcdir)/../libeap/src/common -I$(srcdir)/../libeap/src/eap_common  \
-	-I$(srcdir)/../libeap/src/utils
+	-I$(srcdir)/../libeap/src/utils -I/usr/include/libxml2
+# TODO VSY: handle libxml2 inclusion via config
+
 
 if GSSEAP_ENABLE_ACCEPTOR
 GSSEAP_EXPORTS = mech_eap.exports
@@ -51,7 +53,7 @@ if TARGET_WINDOWS
 mech_eap_la_LDFLAGS += -debug
 endif
 
-mech_eap_la_LIBADD   = \
+mech_eap_la_LIBADD   = -lxml2 -lcurl \
 		       @OPENSAML_LIBS@ @SHIBRESOLVER_LIBS@ @SHIBSP_LIBS@
 mech_eap_la_SOURCES =    			\
 	acquire_cred.c				\
