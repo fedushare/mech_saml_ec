@@ -769,8 +769,8 @@ fprintf(stdout, "RECEIVED FROM IDP (%s)\n", http_data);
  *     header received from SP */
     doc_fromidp = xmlReadMemory(http_data, strlen(http_data), "FROMIDP", NULL, 0);
     if (doc_fromsp != NULL) {
-        char mem[5096]; /* TODO fix */
-        int size;
+        char *mem = NULL;
+        int size = 0;
         xmlNode *header_fromidp = NULL;
         xmlNode *relay_state = NULL;
         xmlDocDump(stdout, doc_fromidp);
@@ -781,8 +781,8 @@ fprintf(stdout, "RECEIVED FROM IDP (%s)\n", http_data);
         xmlAddChild(header_fromidp, xmlCopyNode(relay_state, 1));
 fprintf(stdout, "SENDING TO SP >>>>>>>>>>>>>>>>>>>\n");
         xmlDocDump(stdout, doc_fromidp);
-        xmlDocDumpFormatMemory(doc_fromidp, &mem, &size, 0);
-        return strdup(mem);
+        xmlDocDumpMemory(doc_fromidp, &mem, &size);
+        return mem;
     }
 
 fprintf(stderr, "NULL RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
@@ -1330,6 +1330,8 @@ gss_init_sec_context(OM_uint32 *minor,
 
     if (GSS_ERROR(major))
         gssEapReleaseContext(&tmpMinor, context_handle);
+#if 0 /* TODO: Fix this: ignore this error from the State Machine for now */
+#endif
 
     return major;
 }

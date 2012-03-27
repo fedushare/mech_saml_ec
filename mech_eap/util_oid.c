@@ -204,3 +204,23 @@ duplicateOidSet(OM_uint32 *minor,
 
     return major;
 }
+
+/* TODO VSY: Make this cleaner and also investigate why the KRB version isn't
+ * working correctly */
+
+OM_uint32
+gss_str_to_oid(
+     OM_uint32 *    minor_status,
+     gss_buffer_t   input_string,
+     gss_OID *      output_oid)
+{
+#define MECH_SAML_EC_STRING "{ 1 3 6 1 4 1 11591 4 6 }"
+fprintf(stderr, "COMPARING (%s) and (%s)\n", input_string->value, MECH_SAML_EC_STRING);
+     if (!strncmp(input_string->value, MECH_SAML_EC_STRING, input_string->length
+         && input_string->length == strlen(MECH_SAML_EC_STRING)))
+     {
+         *output_oid = GSS_SAMLEC_MECHANISM;
+         return GSS_S_COMPLETE;
+     } else
+         return GSS_S_FAILURE;
+}

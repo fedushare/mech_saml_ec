@@ -236,8 +236,22 @@ char *saml_req_part3 = "\" ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:binding
 static char *
 getSAMLRequest()
 {
+    char utc_file[512], id_file[512];
+    FILE *utc_fp, *id_fp;
+    char utc_time[512], id[512];
+
+#if 0
     char *utc_time = "2012-03-06T15:17:21Z"; /* TODO: replace with real time */
     char *id = "_893d6ce89d5da751180536d7a6b3b652"; /* TODO: real random id */
+#endif
+
+    /* TODO: replace with current time formatted as above and random id */
+    sprintf(utc_file, "%s/utc", get_current_dir_name());
+    sprintf(id_file, "%s/id", get_current_dir_name());
+    utc_fp = fopen(utc_file, "r");
+    id_fp = fopen(id_file, "r");
+    fscanf(utc_fp, "%s", utc_time);
+    fscanf(id_fp, "%s", id);
 
     int len = strlen(saml_req_part1) + strlen(saml_req_part2) + strlen(saml_req_part3) + strlen(utc_time) + strlen(id)+1;
     char *saml_req = NULL;

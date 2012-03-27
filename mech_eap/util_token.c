@@ -317,6 +317,7 @@ size_t
 tokenSize(const gss_OID_desc *mech, size_t body_size)
 {
     GSSEAP_ASSERT(mech != GSS_C_NO_OID);
+    GSSEAP_ASSERT(mech == GSS_SAMLEC_MECHANISM);
 
     /* set body_size to sequence contents size */
     body_size += 4 + (size_t) mech->length;         /* NEED overflow check */
