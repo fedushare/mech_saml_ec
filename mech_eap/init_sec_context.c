@@ -684,7 +684,7 @@ freeChildren(xmlNode *a_node)
     }
 }
 
-char http_data[5096] = ""; /* TODO VSY Make this dynamic */
+char http_data[15096] = ""; /* TODO VSY Make this dynamic */
 
 size_t
 write_data(void *buffer, size_t size, size_t nmemb, void *userp)
