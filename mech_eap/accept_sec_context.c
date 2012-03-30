@@ -683,6 +683,14 @@ cleanup:
     if (!strncmp(inputToken->value, "SAML_ASSERTION_TO_SP", strlen("SAML_ASSERTION_TO_SP")))
     {
          fprintf(stderr, "GSSAPI Acceptor: Received SAML_ASSERTION_TO_SP from initiator\n");
+
+
+         /* TODO VSY: Need to set the following here:
+ *          ctx->mechanismUsed should already be set automatically
+ *          ctx->gssFlags
+ *          ctx->initiatorName
+ *          ctx->expiryTime (0 for indefinite)
+ */
     }
 
         GSSEAP_SM_TRANSITION_NEXT(ctx);
