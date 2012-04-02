@@ -38,7 +38,6 @@
 
 #ifdef WIN32
 # include <shlobj.h>     /* may need to use ShFolder.h instead */
-# include <stdio.h>
 #else
 # include <pwd.h>
 #endif

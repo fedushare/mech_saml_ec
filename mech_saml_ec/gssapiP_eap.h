@@ -39,6 +39,7 @@
 #define KRB5_DEPRECATED         /* so we can use krb5_free_unparsed_name() */
 #endif
 
+#include <stdio.h>
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
@@ -79,15 +80,6 @@ typedef const gss_OID_desc *gss_const_OID;
 
 /* Kerberos headers */
 #include <krb5.h>
-
-/* EAP headers */
-#include <includes.h>
-#include <common.h>
-#include <eap_peer/eap.h>
-#include <eap_peer/eap_config.h>
-#include <eap_peer/eap_methods.h>
-#include <eap_common/eap_common.h>
-#include <wpabuf.h>
 
 #ifdef GSSEAP_ENABLE_ACCEPTOR
 /* FreeRADIUS headers */
@@ -191,9 +183,7 @@ struct gss_cred_id_struct
 
 struct gss_eap_initiator_ctx {
     unsigned int idleWhile;
-    struct eap_peer_config eapPeerConfig;
     struct eap_sm *eap;
-    struct wpabuf reqData;
 };
 
 #ifdef GSSEAP_ENABLE_ACCEPTOR

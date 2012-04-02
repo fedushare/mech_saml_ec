@@ -528,35 +528,12 @@ eapGssSmInitIdentity(OM_uint32 *minor,
                      gss_buffer_t outputToken GSSEAP_UNUSED,
                      OM_uint32 *smFlags)
 {
-    struct eap_config eapConfig;
-
     *smFlags |= SM_FLAG_FORCE_SEND_TOKEN;
 
     GSSEAP_ASSERT((ctx->flags & CTX_FLAG_KRB_REAUTH) == 0);
     GSSEAP_ASSERT(inputToken == GSS_C_NO_BUFFER);
 
-#ifdef MECH_EAP
-    memset(&eapConfig, 0, sizeof(eapConfig));
-
-    ctx->initiatorCtx.eap = eap_peer_sm_init(ctx,
-                                             &gssEapPolicyCallbacks,
-                                             ctx,
-                                             &eapConfig);
-    if (ctx->initiatorCtx.eap == NULL) {
-        *minor = GSSEAP_PEER_SM_INIT_FAILURE;
-        return GSS_S_FAILURE;
-    }
-
-    ctx->flags |= CTX_FLAG_EAP_RESTART | CTX_FLAG_EAP_PORT_ENABLED;
-
-    /* poke EAP state machine */
-    if (eap_peer_sm_step(ctx->initiatorCtx.eap) != 0) {
-        *minor = GSSEAP_PEER_SM_STEP_FAILURE;
-        return GSS_S_FAILURE;
-    }
-#else
     /* makeStringBuffer(minor, "n,,", outputToken); */
-#endif
 
     GSSEAP_SM_TRANSITION_NEXT(ctx);
 

@@ -36,8 +36,6 @@
  */
 
 #include "gssapiP_eap.h"
-#include <time.h>
-#include <sys/time.h>
 
 #if MECH_EAP
 /*
