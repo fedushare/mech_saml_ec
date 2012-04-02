@@ -36,6 +36,8 @@
  */
 
 #include "gssapiP_eap.h"
+#include <time.h>
+#include <sys/time.h>
 
 #ifdef GSSEAP_ENABLE_REAUTH
 static OM_uint32
@@ -233,25 +235,31 @@ char *saml_req_part3 = "\" ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:binding
 "</S:Envelope>";
 #endif
 
+static void random_hex(char* s, size_t len) {
+    static const char hexdigit[] = "0123456789abcdef";
+    size_t i;
+    for ( i = 0; i < len - 1; ++i )
+        s[i] = hexdigit[random() % (sizeof(hexdigit) - 1)];
+    s[len - 1] = 0;
+}
+
 static char *
 getSAMLRequest()
 {
-    char utc_file[512], id_file[512];
-    FILE *utc_fp, *id_fp;
-    char utc_time[512], id[512];
+    static int init_rand = 0;
+    char utc_time[512], id[36];
+    time_t rawtime;
+    struct tm* timeinfo;
 
-#if 0
-    char *utc_time = "2012-03-06T15:17:21Z"; /* TODO: replace with real time */
-    char *id = "_893d6ce89d5da751180536d7a6b3b652"; /* TODO: real random id */
-#endif
+    time(&rawtime);
+    timeinfo = gmtime(&rawtime);
+    strftime(utc_time, sizeof(utc_time), "%Y-%m-%dT%TZ", timeinfo);
 
-    /* TODO: replace with current time formatted as above and random id */
-    sprintf(utc_file, "%s/utc", get_current_dir_name());
-    sprintf(id_file, "%s/id", get_current_dir_name());
-    utc_fp = fopen(utc_file, "r");
-    id_fp = fopen(id_file, "r");
-    fscanf(utc_fp, "%s", utc_time);
-    fscanf(id_fp, "%s", id);
+    if ( ! init_rand )
+        srandom(rawtime);
+
+    id[0] = '_';
+    random_hex(id + 1, sizeof(id) - 1);
 
     int len = strlen(saml_req_part1) + strlen(saml_req_part2) + strlen(saml_req_part3) + strlen(utc_time) + strlen(id)+1;
     char *saml_req = NULL;
