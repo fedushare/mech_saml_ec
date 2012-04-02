@@ -89,10 +89,6 @@ extern "C" {
 #define operator fr_operator
 #endif
 #endif
-#ifdef MECH_EAP
-#include <freeradius/libradius.h>
-#include <freeradius/radius.h>
-#endif
 
 #undef pid_t
 
