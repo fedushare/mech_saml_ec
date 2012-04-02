@@ -64,6 +64,5 @@ if test x_$found_shibresolver = x_yes; then
   AX_CHECK_SHIBSP
 fi
 
-AC_CONFIG_FILES([Makefile libeap/Makefile mech_saml_ec/Makefile 
-			 gss-sample/Makefile])
+AC_CONFIG_FILES([Makefile mech_saml_ec/Makefile gss-sample/Makefile])
 AC_OUTPUT
