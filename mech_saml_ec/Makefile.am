@@ -1,7 +1,7 @@
 AUTOMAKE_OPTIONS = foreign
 
 EXTRA_DIST = gsseap_err.et radsec_err.et \
-	mech_eap.exports mech_eap-noacceptor.exports  radius_ad.exports \
+	mech_saml_ec.exports mech_saml_ec-noacceptor.exports  radius_ad.exports \
 	LICENSE AUTHORS
 
 
@@ -14,48 +14,48 @@ EAP_CFLAGS = -I$(srcdir)/../libeap/src -I$(srcdir)/../libeap/src/common -I$(srcd
 
 
 if GSSEAP_ENABLE_ACCEPTOR
-GSSEAP_EXPORTS = mech_eap.exports
+GSS_EXPORTS = mech_saml_ec.exports
 else
-GSSEAP_EXPORTS = mech_eap-noacceptor.exports
+GSS_EXPORTS = mech_saml_ec-noacceptor.exports
 endif
 
 gssdir = $(libdir)/gss
-gss_LTLIBRARIES = mech_eap.la
+gss_LTLIBRARIES = mech_saml_ec.la
 
 if TARGET_WINDOWS
 EAP_CFLAGS += -DCONFIG_WIN32_DEFAULTS -DUSE_INTERNAL_CRYPTO
 OS_LIBS = -lshell32 -ladvapi32 -lws2_32 -lcomerr32
-mech_eap_la_CFLAGS   = -Zi
-mech_eap_la_CXXFLAGS = -Zi
+mech_saml_ec_la_CFLAGS   = -Zi
+mech_saml_ec_la_CXXFLAGS = -Zi
 else
 EAP_CFLAGS += -DEAP_TLS -DEAP_PEAP -DEAP_TTLS -DEAP_MD5 -DEAP_MSCHAPv2 -DEAP_GTC -DEAP_OTP -DEAP_LEAP -DEAP_PSK -DEAP_PAX -DEAP_SAKE -DEAP_GPSK -DEAP_GPSK_SHA256 -DEAP_SERVER_IDENTITY -DEAP_SERVER_TLS -DEAP_SERVER_PEAP -DEAP_SERVER_TTLS -DEAP_SERVER_MD5 -DEAP_SERVER_MSCHAPV2 -DEAP_SERVER_GTC -DEAP_SERVER_PSK -DEAP_SERVER_PAX -DEAP_SERVER_SAKE -DEAP_SERVER_GPSK -DEAP_SERVER_GPSK_SHA256 -DIEEE8021X_EAPOL
 OS_LIBS =
 ###VSY: for now no errors for unused parameters and variables
-###mech_eap_la_CFLAGS   = -Werror -Wall -Wunused-parameter
-###mech_eap_la_CXXFLAGS = -Werror -Wall -Wunused-parameter
-mech_eap_la_CFLAGS   = -Wall -Wno-unused-variable
-mech_eap_la_CXXFLAGS = -Wall -Wno-unused-variable
+###mech_saml_ec_la_CFLAGS   = -Werror -Wall -Wunused-parameter
+###mech_saml_ec_la_CXXFLAGS = -Werror -Wall -Wunused-parameter
+mech_saml_ec_la_CFLAGS   = -Wall -Wno-unused-variable
+mech_saml_ec_la_CXXFLAGS = -Wall -Wno-unused-variable
 endif
-mech_eap_la_DEPENDENCIES = $(GSSEAP_EXPORTS)
+mech_saml_ec_la_DEPENDENCIES = $(GSS_EXPORTS)
 
-mech_eap_la_CPPFLAGS = -DBUILD_GSSEAP_LIB -DSYSCONFDIR=\"${sysconfdir}\" -DDATAROOTDIR=\"${datarootdir}\"
-mech_eap_la_CFLAGS   += \
+mech_saml_ec_la_CPPFLAGS = -DSYSCONFDIR=\"${sysconfdir}\" -DDATAROOTDIR=\"${datarootdir}\"
+mech_saml_ec_la_CFLAGS   += \
 			@TARGET_CFLAGS@ $(EAP_CFLAGS)
-mech_eap_la_CXXFLAGS += \
+mech_saml_ec_la_CXXFLAGS += \
 		        @OPENSAML_CXXFLAGS@ @SHIBRESOLVER_CXXFLAGS@ @SHIBSP_CXXFLAGS@ \
 			@TARGET_CFLAGS@ $(EAP_CFLAGS)
-mech_eap_la_LDFLAGS  = -avoid-version -module \
-			-export-symbols $(GSSEAP_EXPORTS) -no-undefined \
+mech_saml_ec_la_LDFLAGS  = -avoid-version -module \
+			-export-symbols $(GSS_EXPORTS) -no-undefined \
 			@TARGET_LDFLAGS@ @OPENSAML_LDFLAGS@ \
 			@SHIBRESOLVER_LDFLAGS@ @SHIBSP_LDFLAGS@
 
 if TARGET_WINDOWS
-mech_eap_la_LDFLAGS += -debug
+mech_saml_ec_la_LDFLAGS += -debug
 endif
 
-mech_eap_la_LIBADD   = -lxml2 -lcurl \
+mech_saml_ec_la_LIBADD   = -lxml2 -lcurl \
 		       @OPENSAML_LIBS@ @SHIBRESOLVER_LIBS@ @SHIBSP_LIBS@
-mech_eap_la_SOURCES =    			\
+mech_saml_ec_la_SOURCES =    			\
 	acquire_cred.c				\
 	acquire_cred_with_password.c		\
 	add_cred.c				\
@@ -130,16 +130,16 @@ mech_eap_la_SOURCES =    			\
 	util_shib.h
 
 if LIBMOONSHOT
-mech_eap_la_SOURCES += util_moonshot.c
-mech_eap_la_CFLAGS  += @LIBMOONSHOT_CFLAGS@
-mech_eap_la_LDFLAGS += @LIBMOONSHOT_LDFLAGS@
-mech_eap_la_LIBADD  += @LIBMOONSHOT_LIBS@
+mech_saml_ec_la_SOURCES += util_moonshot.c
+mech_saml_ec_la_CFLAGS  += @LIBMOONSHOT_CFLAGS@
+mech_saml_ec_la_LDFLAGS += @LIBMOONSHOT_LDFLAGS@
+mech_saml_ec_la_LIBADD  += @LIBMOONSHOT_LIBS@
 endif
 
 
 if GSSEAP_ENABLE_ACCEPTOR
 
-mech_eap_la_SOURCES +=				\
+mech_saml_ec_la_SOURCES +=				\
 	accept_sec_context.c			\
 	delete_name_attribute.c			\
 	export_name_composite.c			\
@@ -152,11 +152,11 @@ mech_eap_la_SOURCES +=				\
 	util_base64.c				
 
 if OPENSAML
-mech_eap_la_SOURCES += util_saml.cpp
+mech_saml_ec_la_SOURCES += util_saml.cpp
 endif
 
 if SHIBRESOLVER
-mech_eap_la_SOURCES += util_shib.cpp
+mech_saml_ec_la_SOURCES += util_shib.cpp
 endif
 
 endif
@@ -164,7 +164,7 @@ endif
 BUILT_SOURCES = gsseap_err.c radsec_err.c gsseap_err.h radsec_err.h
 
 if GSSEAP_ENABLE_REAUTH
-mech_eap_la_SOURCES += util_reauth.c
+mech_saml_ec_la_SOURCES += util_reauth.c
 endif
 
 gsseap_err.h gsseap_err.c: gsseap_err.et
