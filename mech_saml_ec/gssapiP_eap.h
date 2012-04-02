@@ -168,10 +168,6 @@ struct gss_cred_id_struct
     gss_buffer_desc caCertificate;
     gss_buffer_desc subjectNameConstraint;
     gss_buffer_desc subjectAltNameConstraint;
-#ifdef GSSEAP_ENABLE_REAUTH
-    krb5_ccache krbCredCache;
-    gss_cred_id_t reauthCred;
-#endif
 };
 
 #define CTX_FLAG_INITIATOR                  0x00000001
@@ -238,10 +234,6 @@ struct gss_ctx_id_struct
 #ifdef GSSEAP_ENABLE_ACCEPTOR
         struct gss_eap_acceptor_ctx  acceptor;
         #define acceptorCtx          ctxU.acceptor
-#endif
-#ifdef GSSEAP_ENABLE_REAUTH
-        gss_ctx_id_t                 reauth;
-        #define reauthCtx            ctxU.reauth
 #endif
     } ctxU;
     const struct gss_eap_token_buffer_set *inputTokens;

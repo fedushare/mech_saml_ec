@@ -445,82 +445,6 @@ eapGssSmInitError(OM_uint32 *minor,
     return major;
 }
 
-#ifdef GSSEAP_ENABLE_REAUTH
-static OM_uint32
-eapGssSmInitGssReauth(OM_uint32 *minor,
-                      gss_cred_id_t cred,
-                      gss_ctx_id_t ctx,
-                      gss_name_t target,
-                      gss_OID mech GSSEAP_UNUSED,
-                      OM_uint32 reqFlags,
-                      OM_uint32 timeReq,
-                      gss_channel_bindings_t chanBindings,
-                      gss_buffer_t inputToken,
-                      gss_buffer_t outputToken,
-                      OM_uint32 *smFlags GSSEAP_UNUSED)
-{
-    OM_uint32 major, tmpMinor;
-    gss_name_t mechTarget = GSS_C_NO_NAME;
-    gss_OID actualMech = GSS_C_NO_OID;
-    OM_uint32 gssFlags, timeRec;
-
-    /*
-     * Here we use the passed in credential handle because the resolved
-     * context credential does not currently have the reauth creds.
-     */
-    if (GSSEAP_SM_STATE(ctx) == GSSEAP_STATE_INITIAL) {
-        if (!gssEapCanReauthP(cred, target, timeReq))
-            return GSS_S_CONTINUE_NEEDED;
-
-        ctx->flags |= CTX_FLAG_KRB_REAUTH;
-    } else if ((ctx->flags & CTX_FLAG_KRB_REAUTH) == 0) {
-        major = GSS_S_DEFECTIVE_TOKEN;
-        *minor = GSSEAP_WRONG_ITOK;
-        goto cleanup;
-    }
-
-    GSSEAP_ASSERT(cred != GSS_C_NO_CREDENTIAL);
-
-    major = gssEapMechToGlueName(minor, target, &mechTarget);
-    if (GSS_ERROR(major))
-        goto cleanup;
-
-    major = gssInitSecContext(minor,
-                              cred->reauthCred,
-                              &ctx->reauthCtx,
-                              mechTarget,
-                              (gss_OID)gss_mech_krb5,
-                              reqFlags | GSS_C_MUTUAL_FLAG,
-                              timeReq,
-                              chanBindings,
-                              inputToken,
-                              &actualMech,
-                              outputToken,
-                              &gssFlags,
-                              &timeRec);
-    if (GSS_ERROR(major))
-        goto cleanup;
-
-    ctx->gssFlags = gssFlags;
-
-    if (major == GSS_S_COMPLETE) {
-        GSSEAP_ASSERT(GSSEAP_SM_STATE(ctx) == GSSEAP_STATE_REAUTHENTICATE);
-
-        major = gssEapReauthComplete(minor, ctx, cred, actualMech, timeRec);
-        if (GSS_ERROR(major))
-            goto cleanup;
-        GSSEAP_SM_TRANSITION(ctx, GSSEAP_STATE_ESTABLISHED);
-    } else {
-        GSSEAP_SM_TRANSITION(ctx, GSSEAP_STATE_REAUTHENTICATE);
-    }
-
-cleanup:
-    gssReleaseName(&tmpMinor, &mechTarget);
-
-    return major;
-}
-#endif /* GSSEAP_ENABLE_REAUTH */
-
 #ifdef GSSEAP_DEBUG
 static OM_uint32
 eapGssSmInitVendorInfo(OM_uint32 *minor,
@@ -606,17 +530,7 @@ eapGssSmInitIdentity(OM_uint32 *minor,
 {
     struct eap_config eapConfig;
 
-#ifdef GSSEAP_ENABLE_REAUTH
-    if (GSSEAP_SM_STATE(ctx) == GSSEAP_STATE_REAUTHENTICATE) {
-        OM_uint32 tmpMinor;
-
-        /* server didn't support reauthentication, sent EAP request */
-        gssDeleteSecContext(&tmpMinor, &ctx->reauthCtx, GSS_C_NO_BUFFER);
-        ctx->flags &= ~(CTX_FLAG_KRB_REAUTH);
-        GSSEAP_SM_TRANSITION(ctx, GSSEAP_STATE_INITIAL);
-    } else
-#endif
-        *smFlags |= SM_FLAG_FORCE_SEND_TOKEN;
+    *smFlags |= SM_FLAG_FORCE_SEND_TOKEN;
 
     GSSEAP_ASSERT((ctx->flags & CTX_FLAG_KRB_REAUTH) == 0);
     GSSEAP_ASSERT(inputToken == GSS_C_NO_BUFFER);
@@ -973,33 +887,6 @@ eapGssSmInitInitiatorMIC(OM_uint32 *minor,
     return GSS_S_CONTINUE_NEEDED;
 }
  
-#ifdef GSSEAP_ENABLE_REAUTH
-static OM_uint32
-eapGssSmInitReauthCreds(OM_uint32 *minor,
-                        gss_cred_id_t cred,
-                        gss_ctx_id_t ctx,
-                        gss_name_t target GSSEAP_UNUSED,
-                        gss_OID mech GSSEAP_UNUSED,
-                        OM_uint32 reqFlags GSSEAP_UNUSED,
-                        OM_uint32 timeReq GSSEAP_UNUSED,
-                        gss_channel_bindings_t chanBindings GSSEAP_UNUSED,
-                        gss_buffer_t inputToken,
-                        gss_buffer_t outputToken GSSEAP_UNUSED,
-                        OM_uint32 *smFlags GSSEAP_UNUSED)
-{
-    OM_uint32 major;
-
-    if (ctx->gssFlags & GSS_C_MUTUAL_FLAG) {
-        major = gssEapStoreReauthCreds(minor, ctx, cred, inputToken);
-        if (GSS_ERROR(major))
-            return major;
-    }
-
-    *minor = 0;
-    return GSS_S_CONTINUE_NEEDED;
-}
-#endif /* GSSEAP_ENABLE_REAUTH */
-
 static OM_uint32
 eapGssSmInitAcceptorMIC(OM_uint32 *minor,
                         gss_cred_id_t cred GSSEAP_UNUSED,
@@ -1052,24 +939,12 @@ static struct gss_eap_sm eapGssInitiatorSm[] = {
         eapGssSmInitVendorInfo
     },
 #endif
-#ifdef GSSEAP_ENABLE_REAUTH
-    {
-        ITOK_TYPE_REAUTH_RESP,
-        ITOK_TYPE_REAUTH_REQ,
-        GSSEAP_STATE_INITIAL | GSSEAP_STATE_REAUTHENTICATE,
-        0,
-        eapGssSmInitGssReauth
-    },
-#endif
     {
         ITOK_TYPE_NONE,
 #if 1 /* def MECH_EAP */
         ITOK_TYPE_NONE,
 #else
         ITOK_TYPE_EAP_REQ,
-#endif
-#ifdef GSSEAP_ENABLE_REAUTH
-        GSSEAP_STATE_REAUTHENTICATE |
 #endif
         GSSEAP_STATE_INITIAL,
         SM_ITOK_FLAG_REQUIRED,
@@ -1104,15 +979,6 @@ static struct gss_eap_sm eapGssInitiatorSm[] = {
         SM_ITOK_FLAG_REQUIRED,
         eapGssSmInitInitiatorMIC
     },
-#ifdef GSSEAP_ENABLE_REAUTH
-    {
-        ITOK_TYPE_REAUTH_CREDS,
-        ITOK_TYPE_NONE,
-        GSSEAP_STATE_ACCEPTOR_EXTS,
-        0,
-        eapGssSmInitReauthCreds
-    },
-#endif
     /* other extensions go here */
     {
         ITOK_TYPE_ACCEPTOR_MIC,

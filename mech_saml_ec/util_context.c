@@ -124,11 +124,6 @@ gssEapReleaseContext(OM_uint32 *minor,
 
     gssEapKerberosInit(&tmpMinor, &krbContext);
 
-#ifdef GSSEAP_ENABLE_REAUTH
-    if (ctx->flags & CTX_FLAG_KRB_REAUTH) {
-        gssDeleteSecContext(&tmpMinor, &ctx->reauthCtx, GSS_C_NO_BUFFER);
-    } else
-#endif /* GSSEAP_ENABLE_REAUTH */
     if (CTX_IS_INITIATOR(ctx)) {
         releaseInitiatorContext(&ctx->initiatorCtx);
     }

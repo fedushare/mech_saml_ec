@@ -156,10 +156,6 @@ endif
 
 BUILT_SOURCES = gsseap_err.c gsseap_err.h
 
-if GSSEAP_ENABLE_REAUTH
-mech_saml_ec_la_SOURCES += util_reauth.c
-endif
-
 gsseap_err.h gsseap_err.c: gsseap_err.et
 	$(COMPILE_ET) $<
 

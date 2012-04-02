@@ -39,21 +39,6 @@
 #include <time.h>
 #include <sys/time.h>
 
-#ifdef GSSEAP_ENABLE_REAUTH
-static OM_uint32
-eapGssSmAcceptGssReauth(OM_uint32 *minor,
-                        gss_cred_id_t cred,
-                        gss_ctx_id_t ctx,
-                        gss_name_t target,
-                        gss_OID mech,
-                        OM_uint32 reqFlags,
-                        OM_uint32 timeReq,
-                        gss_channel_bindings_t chanBindings,
-                        gss_buffer_t inputToken,
-                        gss_buffer_t outputToken,
-                        OM_uint32 *smFlags);
-#endif
-
 #if MECH_EAP
 /*
  * Mark an acceptor context as ready for cryptographic operations
@@ -816,36 +801,6 @@ eapGssSmAcceptInitiatorMIC(OM_uint32 *minor,
     return GSS_S_CONTINUE_NEEDED;
 }
 
-#ifdef GSSEAP_ENABLE_REAUTH
-static OM_uint32
-eapGssSmAcceptReauthCreds(OM_uint32 *minor,
-                          gss_cred_id_t cred,
-                          gss_ctx_id_t ctx,
-                          gss_name_t target GSSEAP_UNUSED,
-                          gss_OID mech GSSEAP_UNUSED,
-                          OM_uint32 reqFlags GSSEAP_UNUSED,
-                          OM_uint32 timeReq GSSEAP_UNUSED,
-                          gss_channel_bindings_t chanBindings GSSEAP_UNUSED,
-                          gss_buffer_t inputToken GSSEAP_UNUSED,
-                          gss_buffer_t outputToken,
-                          OM_uint32 *smFlags GSSEAP_UNUSED)
-{
-    OM_uint32 major;
-
-    /*
-     * If we're built with fast reauthentication enabled, then
-     * fabricate a ticket from the initiator to ourselves.
-     */
-    major = gssEapMakeReauthCreds(minor, ctx, cred, outputToken);
-    if (major == GSS_S_UNAVAILABLE)
-        major = GSS_S_COMPLETE;
-    if (major == GSS_S_COMPLETE)
-        major = GSS_S_CONTINUE_NEEDED;
-
-    return major;
-}
-#endif
-
 static OM_uint32
 eapGssSmAcceptAcceptorMIC(OM_uint32 *minor,
                           gss_cred_id_t cred GSSEAP_UNUSED,
@@ -892,15 +847,6 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
         eapGssSmAcceptVendorInfo,
     },
 #endif
-#ifdef GSSEAP_ENABLE_REAUTH
-    {
-        ITOK_TYPE_REAUTH_REQ,
-        ITOK_TYPE_REAUTH_RESP,
-        GSSEAP_STATE_INITIAL,
-        0,
-        eapGssSmAcceptGssReauth,
-    },
-#endif
     {
 #if 1 /* def MECH_EAP */
         ITOK_TYPE_NONE,
@@ -941,15 +887,6 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
         SM_ITOK_FLAG_REQUIRED,
         eapGssSmAcceptInitiatorMIC,
     },
-#ifdef GSSEAP_ENABLE_REAUTH
-    {
-        ITOK_TYPE_NONE,
-        ITOK_TYPE_REAUTH_CREDS,
-        GSSEAP_STATE_ACCEPTOR_EXTS,
-        0,
-        eapGssSmAcceptReauthCreds,
-    },
-#endif
     {
         ITOK_TYPE_NONE,
         ITOK_TYPE_ACCEPTOR_MIC,
@@ -1054,88 +991,6 @@ gssEapAcceptSecContext(OM_uint32 *minor,
 cleanup:
     return major;
 }
-
-#ifdef GSSEAP_ENABLE_REAUTH
-static OM_uint32
-acceptReadyKrb(OM_uint32 *minor,
-               gss_ctx_id_t ctx,
-               gss_cred_id_t cred,
-               const gss_name_t initiator,
-               const gss_OID mech,
-               OM_uint32 timeRec)
-{
-    OM_uint32 major;
-
-    major = gssEapGlueToMechName(minor, ctx, initiator, &ctx->initiatorName);
-    if (GSS_ERROR(major))
-        return major;
-
-    major = gssEapReauthComplete(minor, ctx, cred, mech, timeRec);
-    if (GSS_ERROR(major))
-        return major;
-
-    *minor = 0;
-    return GSS_S_COMPLETE;
-}
-
-static OM_uint32
-eapGssSmAcceptGssReauth(OM_uint32 *minor,
-                        gss_cred_id_t cred,
-                        gss_ctx_id_t ctx,
-                        gss_name_t target GSSEAP_UNUSED,
-                        gss_OID mech,
-                        OM_uint32 reqFlags GSSEAP_UNUSED,
-                        OM_uint32 timeReq GSSEAP_UNUSED,
-                        gss_channel_bindings_t chanBindings,
-                        gss_buffer_t inputToken,
-                        gss_buffer_t outputToken,
-                        OM_uint32 *smFlags)
-{
-    OM_uint32 major, tmpMinor;
-    gss_name_t krbInitiator = GSS_C_NO_NAME;
-    OM_uint32 gssFlags, timeRec = GSS_C_INDEFINITE;
-
-    /*
-     * If we're built with fast reauthentication support, it's valid
-     * for an initiator to send a GSS reauthentication token as its
-     * initial context token, causing us to short-circuit the state
-     * machine and process Kerberos GSS messages instead.
-     */
-
-    ctx->flags |= CTX_FLAG_KRB_REAUTH;
-
-    major = gssAcceptSecContext(minor,
-                                &ctx->reauthCtx,
-                                cred->reauthCred,
-                                inputToken,
-                                chanBindings,
-                                &krbInitiator,
-                                &mech,
-                                outputToken,
-                                &gssFlags,
-                                &timeRec,
-                                NULL);
-    if (major == GSS_S_COMPLETE) {
-        major = acceptReadyKrb(minor, ctx, cred,
-                               krbInitiator, mech, timeRec);
-        if (major == GSS_S_COMPLETE) {
-            GSSEAP_SM_TRANSITION(ctx, GSSEAP_STATE_ESTABLISHED);
-        }
-        ctx->gssFlags = gssFlags;
-    } else if (GSS_ERROR(major) &&
-        (*smFlags & SM_FLAG_INPUT_TOKEN_CRITICAL) == 0) {
-        /* pretend reauthentication attempt never happened */
-        gssDeleteSecContext(&tmpMinor, &ctx->reauthCtx, GSS_C_NO_BUFFER);
-        ctx->flags &= ~(CTX_FLAG_KRB_REAUTH);
-        GSSEAP_SM_TRANSITION(ctx, GSSEAP_STATE_INITIAL);
-        major = GSS_S_CONTINUE_NEEDED;
-    }
-
-    gssReleaseName(&tmpMinor, &krbInitiator);
-
-    return major;
-}
-#endif /* GSSEAP_ENABLE_REAUTH */
 
 OM_uint32 GSSAPI_CALLCONV
 gss_accept_sec_context(OM_uint32 *minor,

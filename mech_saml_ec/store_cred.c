@@ -37,13 +37,8 @@ gss_store_cred(OM_uint32 *minor,
                const gss_cred_id_t cred,
                gss_cred_usage_t input_usage,
                const gss_OID desired_mech GSSEAP_UNUSED,
-#ifdef GSSEAP_ENABLE_REAUTH
-               OM_uint32 overwrite_cred,
-               OM_uint32 default_cred,
-#else
                OM_uint32 overwrite_cred GSSEAP_UNUSED,
                OM_uint32 default_cred GSSEAP_UNUSED,
-#endif
                gss_OID_set *elements_stored,
                gss_cred_usage_t *cred_usage_stored)
 {
@@ -63,19 +58,6 @@ gss_store_cred(OM_uint32 *minor,
 
     major = GSS_S_COMPLETE;
     *minor = 0;
-
-#ifdef GSSEAP_ENABLE_REAUTH
-    if (cred->reauthCred != GSS_C_NO_CREDENTIAL) {
-        major = gssStoreCred(minor,
-                             cred->reauthCred,
-                             input_usage,
-                             (gss_OID)gss_mech_krb5,
-                             overwrite_cred,
-                             default_cred,
-                             elements_stored,
-                             cred_usage_stored);
-    }
-#endif
 
     GSSEAP_MUTEX_UNLOCK(&cred->mutex);
 

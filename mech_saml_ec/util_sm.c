@@ -64,11 +64,6 @@ gssEapStateToString(enum gss_eap_state state)
     case GSSEAP_STATE_ACCEPTOR_EXTS:
         s = "ACCEPTOR_EXTS";
         break;
-#ifdef GSSEAP_ENABLE_REAUTH
-    case GSSEAP_STATE_REAUTHENTICATE:
-        s = "REAUTHENTICATE";
-        break;
-#endif
     case GSSEAP_STATE_ESTABLISHED:
         s = "ESTABLISHED";
         break;

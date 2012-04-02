@@ -45,12 +45,6 @@ gssEapInitiatorInit(OM_uint32 *minor)
 
     initialize_eapg_error_table();
 
-#ifdef GSSEAP_ENABLE_REAUTH
-    major = gssEapReauthInitialize(minor);
-    if (GSS_ERROR(major))
-        return major;
-#endif
-
     *minor = 0;
     return GSS_S_COMPLETE;
 }

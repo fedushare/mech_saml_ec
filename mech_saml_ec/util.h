@@ -671,9 +671,6 @@ enum gss_eap_state {
 #ifdef MECH_EAP
     GSSEAP_STATE_INITIATOR_EXTS = 0x04,     /* initiator extensions */
     GSSEAP_STATE_ACCEPTOR_EXTS  = 0x08,     /* acceptor extensions */
-#ifdef GSSEAP_ENABLE_REAUTH
-    GSSEAP_STATE_REAUTHENTICATE = 0x10,     /* GSS reauthentication messages */
-#endif
     GSSEAP_STATE_ESTABLISHED    = 0x20,     /* context established */
     GSSEAP_STATE_ALL            = 0x3F
 #else
@@ -1036,8 +1033,5 @@ gssEapDestroyKrbContext(krb5_context context);
 #include "util_attr.h"
 #include "util_base64.h"
 #endif /* GSSEAP_ENABLE_ACCEPTOR */
-#ifdef GSSEAP_ENABLE_REAUTH
-#include "util_reauth.h"
-#endif
 
 #endif /* _UTIL_H_ */

@@ -105,17 +105,6 @@ gssEapReleaseCred(OM_uint32 *minor, gss_cred_id_t *pCred)
     gss_release_buffer(&tmpMinor, &cred->subjectNameConstraint);
     gss_release_buffer(&tmpMinor, &cred->subjectAltNameConstraint);
 
-#ifdef GSSEAP_ENABLE_REAUTH
-    if (cred->krbCredCache != NULL) {
-        if (cred->flags & CRED_FLAG_DEFAULT_CCACHE)
-            krb5_cc_close(krbContext, cred->krbCredCache);
-        else
-            krb5_cc_destroy(krbContext, cred->krbCredCache);
-    }
-    if (cred->reauthCred != GSS_C_NO_CREDENTIAL)
-        gssReleaseCred(&tmpMinor, &cred->reauthCred);
-#endif
-
     GSSEAP_MUTEX_DESTROY(&cred->mutex);
     memset(cred, 0, sizeof(*cred));
     GSSEAP_FREE(cred);
@@ -621,10 +610,6 @@ gssEapDuplicateCred(OM_uint32 *minor,
         duplicateBufferOrCleanup(&src->subjectNameConstraint, &dst->subjectNameConstraint);
     if (src->subjectAltNameConstraint.value != NULL)
         duplicateBufferOrCleanup(&src->subjectAltNameConstraint, &dst->subjectAltNameConstraint);
-
-#ifdef GSSEAP_ENABLE_REAUTH
-    /* XXX krbCredCache, reauthCred */
-#endif
 
     *pDst = dst;
     dst = GSS_C_NO_CREDENTIAL;
