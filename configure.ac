@@ -81,7 +81,6 @@ if test x_$found_shibresolver = x_yes; then
   AX_CHECK_SHIBSP
 fi
 
-AX_CHECK_LIBMOONSHOT
 AC_CONFIG_FILES([Makefile libeap/Makefile mech_saml_ec/Makefile 
 			 gss-sample/Makefile])
 AC_OUTPUT

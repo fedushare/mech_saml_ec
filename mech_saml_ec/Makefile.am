@@ -1,7 +1,7 @@
 AUTOMAKE_OPTIONS = foreign
 
 EXTRA_DIST = gsseap_err.et radsec_err.et \
-	mech_saml_ec.exports mech_saml_ec-noacceptor.exports  radius_ad.exports \
+	mech_saml_ec.exports mech_saml_ec-noacceptor.exports \
 	LICENSE AUTHORS
 
 
@@ -28,6 +28,7 @@ OS_LIBS = -lshell32 -ladvapi32 -lws2_32 -lcomerr32
 mech_saml_ec_la_CFLAGS   = -Zi
 mech_saml_ec_la_CXXFLAGS = -Zi
 else
+# TODO: remove these definitions once libeap/ dependency is gone
 EAP_CFLAGS += -DEAP_TLS -DEAP_PEAP -DEAP_TTLS -DEAP_MD5 -DEAP_MSCHAPv2 -DEAP_GTC -DEAP_OTP -DEAP_LEAP -DEAP_PSK -DEAP_PAX -DEAP_SAKE -DEAP_GPSK -DEAP_GPSK_SHA256 -DEAP_SERVER_IDENTITY -DEAP_SERVER_TLS -DEAP_SERVER_PEAP -DEAP_SERVER_TTLS -DEAP_SERVER_MD5 -DEAP_SERVER_MSCHAPV2 -DEAP_SERVER_GTC -DEAP_SERVER_PSK -DEAP_SERVER_PAX -DEAP_SERVER_SAKE -DEAP_SERVER_GPSK -DEAP_SERVER_GPSK_SHA256 -DIEEE8021X_EAPOL
 OS_LIBS =
 ###VSY: for now no errors for unused parameters and variables
@@ -93,7 +94,6 @@ mech_saml_ec_la_SOURCES =    			\
 	pseudo_random.c				\
 	query_mechanism_info.c			\
 	query_meta_data.c			\
-	radsec_err.c				\
 	release_cred.c				\
 	release_name.c				\
 	release_oid.c				\
@@ -129,13 +129,6 @@ mech_saml_ec_la_SOURCES =    			\
 	util_saml.h \
 	util_shib.h
 
-if LIBMOONSHOT
-mech_saml_ec_la_SOURCES += util_moonshot.c
-mech_saml_ec_la_CFLAGS  += @LIBMOONSHOT_CFLAGS@
-mech_saml_ec_la_LDFLAGS += @LIBMOONSHOT_LDFLAGS@
-mech_saml_ec_la_LIBADD  += @LIBMOONSHOT_LIBS@
-endif
-
 
 if GSSEAP_ENABLE_ACCEPTOR
 
@@ -161,7 +154,7 @@ endif
 
 endif
 
-BUILT_SOURCES = gsseap_err.c radsec_err.c gsseap_err.h radsec_err.h
+BUILT_SOURCES = gsseap_err.c gsseap_err.h
 
 if GSSEAP_ENABLE_REAUTH
 mech_saml_ec_la_SOURCES += util_reauth.c
@@ -170,10 +163,5 @@ endif
 gsseap_err.h gsseap_err.c: gsseap_err.et
 	$(COMPILE_ET) $<
 
-radsec_err.h radsec_err.c: radsec_err.et
-	$(COMPILE_ET) $<
-
-radsec_err.c: radsec_err.h
-
 clean-generic:
-	rm -f gsseap_err.[ch] radsec_err.[ch]
+	rm -f gsseap_err.[ch]

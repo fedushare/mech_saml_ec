@@ -104,11 +104,6 @@ extern "C" {
 
 #undef pid_t
 
-#ifdef MECH_EAP
-/* libradsec headers */
-#include <radsec/radsec.h>
-#include <radsec/request.h>
-#endif
 #ifdef __cplusplus
 #ifndef WIN32
 #undef operator
@@ -118,9 +113,6 @@ extern "C" {
 #endif /* GSSEAP_ENABLE_ACCEPTOR */
 
 #include "gsseap_err.h"
-#ifdef MECH_EAP
-#include "radsec_err.h"
-#endif
 #include "util.h"
 
 #ifdef __cplusplus
@@ -345,10 +337,6 @@ gssEapDisplayStatus(OM_uint32 *minor,
 
 #define IS_WIRE_ERROR(err)              ((err) > GSSEAP_RESERVED && \
                                          (err) <= GSSEAP_RADIUS_PROT_FAILURE)
-
-/* upper bound of RADIUS error range must be kept in sync with radsec.h */
-#define IS_RADIUS_ERROR(err)            ((err) >= ERROR_TABLE_BASE_rse && \
-                                         (err) <= ERROR_TABLE_BASE_rse + 20)
 
 /* exchange_meta_data.c */
 OM_uint32 GSSAPI_CALLCONV
