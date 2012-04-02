@@ -1,0 +1,5 @@
+gss-client
+gss-server
+*.o
+.deps
+.libs
