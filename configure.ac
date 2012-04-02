@@ -1,5 +1,5 @@
 AC_PREREQ([2.61])
-AC_INIT([mech_eap], [0.1], [bugs@project-moonshot.org])
+AC_INIT([mech_saml_ec], [0.1])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
 
@@ -82,6 +82,6 @@ if test x_$found_shibresolver = x_yes; then
 fi
 
 AX_CHECK_LIBMOONSHOT
-AC_CONFIG_FILES([Makefile libeap/Makefile mech_eap/Makefile 
-			 gss-sample/Makefile mech_eap.spec])
+AC_CONFIG_FILES([Makefile libeap/Makefile mech_saml_ec/Makefile 
+			 gss-sample/Makefile])
 AC_OUTPUT

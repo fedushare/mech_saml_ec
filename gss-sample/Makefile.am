@@ -50,5 +50,5 @@ CLEANFILES=gss-client gss-server ./.libs/*gss-client ./.libs/*gss-server
 gss_client_SOURCES = gss-client.c gss-misc.c
 gss_server_SOURCES = gss-server.c gss-misc.c
 
-gss_client_LDADD = ../mech_eap/mech_eap.la $(GSSAPIBASE_LIBS) $(GSSAPI_LIBS) $(LIB_SOCKET) -llog4shib
-gss_server_LDADD = ../mech_eap/mech_eap.la $(GSSAPIBASE_LIBS) $(GSSAPI_LIBS) $(LIB_SOCKET) -llog4shib
+gss_client_LDADD = ../mech_saml_ec/mech_eap.la $(GSSAPIBASE_LIBS) $(GSSAPI_LIBS) $(LIB_SOCKET) -llog4shib
+gss_server_LDADD = ../mech_saml_ec/mech_eap.la $(GSSAPIBASE_LIBS) $(GSSAPI_LIBS) $(LIB_SOCKET) -llog4shib
