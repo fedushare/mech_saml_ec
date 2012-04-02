@@ -740,12 +740,13 @@ fprintf(stderr, "DOING HTTP POST\n");
 char *
 processSAMLRequest(gss_cred_id_t cred, gss_buffer_t request)
 {
-    char *user = "ysvenkat"; /* TODO: grab this from cred */
+    char *user = cred->name->username.value;
     char *password = cred->password.value;
     xmlDocPtr doc_fromsp;
     xmlDocPtr doc_fromidp;
     xmlNode *header_fromsp;
 
+fprintf(stderr, "USER IS (%s)\n", user);
 fprintf(stderr, "PASSWORD IS (%s)\n", password);
 
     doc_fromsp = xmlReadMemory(request->value, request->length, "FROMSP", NULL, 0);

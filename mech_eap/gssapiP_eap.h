@@ -144,7 +144,7 @@ struct gss_name_struct
     GSSEAP_MUTEX mutex; /* mutex protects attrCtx */
     OM_uint32 flags;
     gss_OID mechanismUsed; /* this is immutable */
-    krb5_principal krbPrincipal; /* this is immutable */
+    gss_buffer_desc username;
 #ifdef GSSEAP_ENABLE_ACCEPTOR
     struct gss_eap_attr_ctx *attrCtx;
 #endif
