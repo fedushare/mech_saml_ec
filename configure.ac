@@ -1,5 +1,5 @@
 AC_PREREQ([2.61])
-AC_INIT([mech_eap], [0.1], [bugs@project-moonshot.org])
+AC_INIT([mech_saml_ec], [0.1])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
 
@@ -34,23 +34,6 @@ dnl     TARGET_CFLAGS="-Wall -pedantic -pthread"
 dnl     TARGET_LDFLAGS=""
 dnl   esac
 
-reauth=no
-AC_ARG_ENABLE(reauth,
-  [  --enable-reauth whether to enable fast reauthentication protocol: yes/no; default no ],
-  [ if test "x$enableval" = "xyes" -o "x$enableval" = "xno" ; then
-      reauth=$enableval
-    else
-      echo "--enable-reauth argument must be yes or no"
-      exit -1
-    fi
-  ])
-
-if test "x$reauth" = "xyes" ; then
-  echo "Fast reauthentication protocol enabled"
-  TARGET_CFLAGS="$TARGET_CFLAGS -DGSSEAP_ENABLE_REAUTH"
-fi
-AM_CONDITIONAL(GSSEAP_ENABLE_REAUTH, test "x$reauth" != "xno")
-
 acceptor=yes
 AC_ARG_ENABLE(acceptor,
   [  --enable-acceptor whether to enable acceptor codepaths: yes/no; default yes ],
@@ -81,7 +64,5 @@ if test x_$found_shibresolver = x_yes; then
   AX_CHECK_SHIBSP
 fi
 
-AX_CHECK_LIBMOONSHOT
-AC_CONFIG_FILES([Makefile libeap/Makefile mech_eap/Makefile 
-			 gss-sample/Makefile mech_eap.spec])
+AC_CONFIG_FILES([Makefile mech_saml_ec/Makefile gss-sample/Makefile])
 AC_OUTPUT

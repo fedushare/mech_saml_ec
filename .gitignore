@@ -10,5 +10,6 @@ m4
 !m4/minuso.m4
 build-aux
 !build-aux/compile
-mech_eap.spec
-mech_eap*tar*
+Makefile
+stamp-h1
+*.swp
