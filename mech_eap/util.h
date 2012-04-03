@@ -114,6 +114,9 @@ duplicateBuffer(OM_uint32 *minor,
                 const gss_buffer_t src,
                 gss_buffer_t dst);
 
+void
+printBuffer(const gss_buffer_t src);
+
 #define duplicateBufferOrCleanup(src, dst)              \
     do {                                                \
         major = duplicateBuffer((minor), (src), (dst)); \

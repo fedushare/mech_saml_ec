@@ -319,9 +319,19 @@ tokenSize(const gss_OID_desc *mech, size_t body_size)
     GSSEAP_ASSERT(mech != GSS_C_NO_OID);
     GSSEAP_ASSERT(mech == GSS_SAMLEC_MECHANISM);
 
+#ifdef MECH_EAP
     /* set body_size to sequence contents size */
     body_size += 4 + (size_t) mech->length;         /* NEED overflow check */
     return 1 + der_length_size(body_size) + body_size;
+#else
+    if (body_size) {
+        body_size += 4 + (size_t) mech->length;         /* NEED overflow check */
+        return der_length_size(body_size) + body_size;
+    } else {
+        body_size += 4 + (size_t) mech->length;         /* NEED overflow check */
+        return body_size;
+    }
+#endif
 }
 
 /* fills in a buffer with the token header.  The buffer is assumed to
@@ -335,14 +345,16 @@ makeTokenHeader(
     enum gss_eap_token_type tok_type)
 {
     *(*buf)++ = 0x60;
-    der_write_length(buf, (tok_type == -1) ?2:4 + mech->length + body_size);
+    der_write_length(buf, ((tok_type == -1) ?2:4) + mech->length + body_size);
     *(*buf)++ = 0x06;
     *(*buf)++ = (unsigned char)mech->length;
     memcpy(*buf, mech->elements, mech->length);
     *buf += mech->length;
+#ifdef MECH_EAP
     GSSEAP_ASSERT(tok_type != TOK_TYPE_NONE);
     *(*buf)++ = (unsigned char)((tok_type>>8) & 0xff);
     *(*buf)++ = (unsigned char)(tok_type & 0xff);
+#endif
 }
 
 /*

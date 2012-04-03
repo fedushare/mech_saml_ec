@@ -966,6 +966,10 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                        gss_cred_id_t *delegated_cred_handle)
 {
     OM_uint32 major, tmpMinor;
+    char *saml_req = NULL;
+#ifndef MECH_EAP
+    int initialContextToken = (ctx->mechanismUsed == GSS_C_NO_OID);
+#endif
 
     if (cred == GSS_C_NO_CREDENTIAL) {
         if (ctx->cred == GSS_C_NO_CREDENTIAL) {
@@ -998,6 +1002,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
     if (GSS_ERROR(major))
         goto cleanup;
 
+#ifdef MECH_EAP
     major = gssEapSmStep(minor,
                          cred,
                          ctx,
@@ -1010,6 +1015,41 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                          output_token,
                          eapGssAcceptorSm,
                          sizeof(eapGssAcceptorSm) / sizeof(eapGssAcceptorSm[0]));
+#else
+    if (initialContextToken) {
+        gss_buffer_desc innerToken = GSS_C_EMPTY_BUFFER;
+
+        major = gssEapVerifyToken(minor, ctx, input_token, NULL,
+                                  &innerToken);
+        /* TODO innerToken must either be NULL or have meaningful content */
+        if (!GSS_ERROR(major)) {
+            GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
+            saml_req = getSAMLRequest();
+            /* TODO VSY: we should really err out on saml_req being NULL */
+            major = makeStringBuffer(minor, saml_req?:"", output_token);
+            fprintf(stderr, "SENDING SAML_AUTHREQUEST\n");
+            if (!GSS_ERROR(major))
+                major = GSS_S_CONTINUE_NEEDED;
+        }
+    } else {
+        /* TODO: check for the real assertion here */
+        if (!strncmp(input_token->value, "SAML_ASSERTION_TO_SP", strlen("SAML_ASSERTION_TO_SP")))
+        {
+         fprintf(stderr, "GSSAPI Acceptor: Received SAML_ASSERTION_TO_SP from initiator\n");
+
+
+         /* TODO VSY: Need to set the following here:
+ *          ctx->mechanismUsed should already be set automatically
+ *          ctx->gssFlags
+ *          ctx->initiatorName
+ *          ctx->expiryTime (0 for indefinite)
+ */
+        }
+
+        /* ASSUME Assertion is Good for now !!! */
+        major = GSS_S_COMPLETE;
+    }
+#endif
     if (GSS_ERROR(major))
         goto cleanup;
 

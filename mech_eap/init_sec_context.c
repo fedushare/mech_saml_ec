@@ -775,6 +775,9 @@ fprintf(stdout, "RECEIVED FROM IDP (%s)\n", http_data);
         xmlNode *relay_state = NULL;
         xmlDocDump(stdout, doc_fromidp);
         header_fromidp = getElement(xmlDocGetRootElement(doc_fromidp), "Header");
+        if (header_fromidp == NULL)
+            return NULL;
+
         freeChildren(header_fromidp);
         relay_state = getElement(header_fromsp, "RelayState");
 
@@ -1140,6 +1143,7 @@ gssEapInitSecContext(OM_uint32 *minor,
 {
     OM_uint32 major, tmpMinor;
     int initialContextToken = (ctx->mechanismUsed == GSS_C_NO_OID);
+    char *saml_response = NULL;
 
     /*
      * XXX is acquiring the credential lock here necessary? The password is
@@ -1169,6 +1173,7 @@ gssEapInitSecContext(OM_uint32 *minor,
             goto cleanup;
     }
 
+#ifdef MECH_EAP
     major = gssEapSmStep(minor,
                          cred,
                          ctx,
@@ -1181,6 +1186,28 @@ gssEapInitSecContext(OM_uint32 *minor,
                          output_token,
                          eapGssInitiatorSm,
                          sizeof(eapGssInitiatorSm) / sizeof(eapGssInitiatorSm[0]));
+#else
+    if (initialContextToken) {
+        gss_buffer_desc innerToken = GSS_C_EMPTY_BUFFER;
+
+        major = gssEapMakeToken(minor, ctx, &innerToken, -1,
+                   output_token);
+        if (major == GSS_S_COMPLETE)
+            major = GSS_S_CONTINUE_NEEDED;
+    } else {
+        saml_response = processSAMLRequest(cred, input_token);
+        if (saml_response == NULL) {
+            /* Send a fault msg to SP */
+            major = GSS_S_FAILURE;
+            minor = GSSEAP_IDENTITY_SERVICE_UNKNOWN_ERROR;
+        } else {
+            major = makeStringBuffer(minor, saml_response, output_token);
+            if (!GSS_ERROR(major))
+                /* TODO: Set the below needed info */
+                major = GSS_S_COMPLETE;
+        }
+    }
+#endif
     if (GSS_ERROR(major))
         goto cleanup;
 
@@ -1199,7 +1226,10 @@ gssEapInitSecContext(OM_uint32 *minor,
     if (time_rec != NULL)
         gssEapContextTime(&tmpMinor, ctx, time_rec);
 
+#ifdef MECH_EAP
+    /* TODO VSY: Do we need to care about maintaining ctx->state ? */
     GSSEAP_ASSERT(CTX_IS_ESTABLISHED(ctx) || major == GSS_S_CONTINUE_NEEDED);
+#endif
 
 cleanup:
     if (cred != GSS_C_NO_CREDENTIAL)
@@ -1330,7 +1360,9 @@ gss_init_sec_context(OM_uint32 *minor,
 
     if (GSS_ERROR(major))
         gssEapReleaseContext(&tmpMinor, context_handle);
-#if 0 /* TODO: Fix this: ignore this error from the State Machine for now */
+#ifndef MECH_EAP
+    else
+        printBuffer(output_token);
 #endif
 
     return major;
