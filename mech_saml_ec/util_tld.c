@@ -43,8 +43,6 @@ destroyThreadLocalData(struct gss_eap_thread_local_data *tld)
 {
     if (tld->statusInfo != NULL)
         gssEapDestroyStatusInfo(tld->statusInfo);
-    if (tld->krbContext != NULL)
-        gssEapDestroyKrbContext(tld->krbContext);
     GSSEAP_FREE(tld);
 }
 

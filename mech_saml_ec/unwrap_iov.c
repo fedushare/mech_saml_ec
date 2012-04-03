@@ -59,234 +59,6 @@
 
 #include "gssapiP_eap.h"
 
-/*
- * Caller must provide TOKEN | DATA | PADDING | TRAILER, except
- * for DCE in which case it can just provide TOKEN | DATA (must
- * guarantee that DATA is padded)
- */
-OM_uint32
-unwrapToken(OM_uint32 *minor,
-            gss_ctx_id_t ctx,
-#ifdef HAVE_HEIMDAL_VERSION
-            krb5_crypto krbCrypto,
-#else
-            krb5_keyblock *unused GSSEAP_UNUSED,
-#endif
-            int *conf_state,
-            gss_qop_t *qop_state,
-            gss_iov_buffer_desc *iov,
-            int iov_count,
-            enum gss_eap_token_type toktype)
-{
-    OM_uint32 major = GSS_S_FAILURE, code;
-    gss_iov_buffer_t header;
-    gss_iov_buffer_t padding;
-    gss_iov_buffer_t trailer;
-    unsigned char flags;
-    unsigned char *ptr = NULL;
-    int keyUsage;
-    size_t rrc, ec;
-    size_t dataLen, assocDataLen;
-    uint64_t seqnum;
-    int valid = 0;
-    int conf_flag = 0;
-    krb5_context krbContext;
-#ifdef HAVE_HEIMDAL_VERSION
-    int freeCrypto = (krbCrypto == NULL);
-#endif
-
-    GSSEAP_KRB_INIT(&krbContext);
-
-    *minor = 0;
-
-    if (qop_state != NULL)
-        *qop_state = GSS_C_QOP_DEFAULT;
-
-    header = gssEapLocateIov(iov, iov_count, GSS_IOV_BUFFER_TYPE_HEADER);
-    GSSEAP_ASSERT(header != NULL);
-
-    padding = gssEapLocateIov(iov, iov_count, GSS_IOV_BUFFER_TYPE_PADDING);
-    if (padding != NULL && padding->buffer.length != 0) {
-        code = GSSEAP_BAD_PADDING_IOV;
-        major = GSS_S_DEFECTIVE_TOKEN;
-        goto cleanup;
-    }
-
-    trailer = gssEapLocateIov(iov, iov_count, GSS_IOV_BUFFER_TYPE_TRAILER);
-
-    flags = rfc4121Flags(ctx, TRUE);
-
-    if (toktype == TOK_TYPE_WRAP) {
-        keyUsage = !CTX_IS_INITIATOR(ctx)
-                   ? KEY_USAGE_INITIATOR_SEAL
-                   : KEY_USAGE_ACCEPTOR_SEAL;
-    } else {
-        keyUsage = !CTX_IS_INITIATOR(ctx)
-                   ? KEY_USAGE_INITIATOR_SIGN
-                   : KEY_USAGE_ACCEPTOR_SIGN;
-    }
-
-    gssEapIovMessageLength(iov, iov_count, &dataLen, &assocDataLen);
-
-    ptr = (unsigned char *)header->buffer.value;
-
-    if (header->buffer.length < 16) {
-        code = GSSEAP_TOK_TRUNC;
-        major = GSS_S_DEFECTIVE_TOKEN;
-        goto cleanup;
-    }
-
-    if ((ptr[2] & flags) != flags) {
-        code = GSSEAP_BAD_DIRECTION;
-        major = GSS_S_BAD_SIG;
-        goto cleanup;
-    }
-
-#ifdef HAVE_HEIMDAL_VERSION
-    if (krbCrypto == NULL) {
-        code = krb5_crypto_init(krbContext, &ctx->rfc3961Key,
-                                ETYPE_NULL, &krbCrypto);
-        if (code != 0)
-            goto cleanup;
-    }
-#endif
-
-    if (toktype == TOK_TYPE_WRAP) {
-        size_t krbTrailerLen;
-
-        if (load_uint16_be(ptr) != TOK_TYPE_WRAP)
-            goto defective;
-        conf_flag = ((ptr[2] & TOK_FLAG_WRAP_CONFIDENTIAL) != 0);
-        if (ptr[3] != 0xFF)
-            goto defective;
-        ec = load_uint16_be(ptr + 4);
-        rrc = load_uint16_be(ptr + 6);
-        seqnum = load_uint64_be(ptr + 8);
-
-        code = krbCryptoLength(krbContext, KRB_CRYPTO_CONTEXT(ctx),
-                               conf_flag ? KRB5_CRYPTO_TYPE_TRAILER :
-                                           KRB5_CRYPTO_TYPE_CHECKSUM,
-                               &krbTrailerLen);
-        if (code != 0)
-            goto cleanup;
-
-        /* Deal with RRC */
-        if (trailer == NULL) {
-            size_t desired_rrc = krbTrailerLen;
-
-            if (conf_flag) {
-                desired_rrc += 16; /* E(Header) */
-
-                if ((ctx->gssFlags & GSS_C_DCE_STYLE) == 0)
-                    desired_rrc += ec;
-            }
-
-            /* According to MS, we only need to deal with a fixed RRC for DCE */
-            if (rrc != desired_rrc)
-                goto defective;
-        } else if (rrc != 0) {
-            goto defective;
-        }
-
-        if (conf_flag) {
-            unsigned char *althdr;
-
-            /* Decrypt */
-            code = gssEapDecrypt(krbContext,
-                                 ((ctx->gssFlags & GSS_C_DCE_STYLE) != 0),
-                                 ec, rrc, KRB_CRYPTO_CONTEXT(ctx), keyUsage,
-                                 iov, iov_count);
-            if (code != 0) {
-                major = GSS_S_BAD_SIG;
-                goto cleanup;
-            }
-
-            /* Validate header integrity */
-            if (trailer == NULL)
-                althdr = (unsigned char *)header->buffer.value + 16 + ec;
-            else
-                althdr = (unsigned char *)trailer->buffer.value + ec;
-
-            if (load_uint16_be(althdr) != TOK_TYPE_WRAP
-                || althdr[2] != ptr[2]
-                || althdr[3] != ptr[3]
-                || memcmp(althdr + 8, ptr + 8, 8) != 0) {
-                code = GSSEAP_BAD_WRAP_TOKEN;
-                major = GSS_S_BAD_SIG;
-                goto cleanup;
-            }
-        } else {
-            /* Verify checksum: note EC is checksum size here, not padding */
-            if (ec != krbTrailerLen)
-                goto defective;
-
-            /* Zero EC, RRC before computing checksum */
-            store_uint16_be(0, ptr + 4);
-            store_uint16_be(0, ptr + 6);
-
-            code = gssEapVerify(krbContext, ctx->checksumType, rrc,
-                                KRB_CRYPTO_CONTEXT(ctx), keyUsage,
-                                iov, iov_count, &valid);
-            if (code != 0 || valid == FALSE) {
-                major = GSS_S_BAD_SIG;
-                goto cleanup;
-            }
-        }
-
-        code = sequenceCheck(minor, &ctx->seqState, seqnum);
-    } else if (toktype == TOK_TYPE_MIC) {
-        if (load_uint16_be(ptr) != toktype)
-            goto defective;
-
-    verify_mic_1:
-        if (ptr[3] != 0xFF)
-            goto defective;
-        seqnum = load_uint64_be(ptr + 8);
-
-        /*
-         * Although MIC tokens don't have a RRC, they are similarly
-         * composed of a header and a checksum. So the verify_mic()
-         * can be implemented with a single header buffer, fake the
-         * RRC to the putative trailer length if no trailer buffer.
-         */
-        code = gssEapVerify(krbContext, ctx->checksumType,
-                            trailer != NULL ? 0 : header->buffer.length - 16,
-                            KRB_CRYPTO_CONTEXT(ctx), keyUsage,
-                            iov, iov_count, &valid);
-        if (code != 0 || valid == FALSE) {
-            major = GSS_S_BAD_SIG;
-            goto cleanup;
-        }
-        code = sequenceCheck(minor, &ctx->seqState, seqnum);
-    } else if (toktype == TOK_TYPE_DELETE_CONTEXT) {
-        if (load_uint16_be(ptr) != TOK_TYPE_DELETE_CONTEXT)
-            goto defective;
-        goto verify_mic_1;
-    } else {
-        goto defective;
-    }
-
-    if (conf_state != NULL)
-        *conf_state = conf_flag;
-
-    code = 0;
-    major = GSS_S_COMPLETE;
-    goto cleanup;
-
-defective:
-    code = GSSEAP_BAD_WRAP_TOKEN;
-    major = GSS_S_DEFECTIVE_TOKEN;
-
-cleanup:
-    *minor = code;
-#ifdef HAVE_HEIMDAL_VERSION
-    if (freeCrypto && krbCrypto != NULL)
-        krb5_crypto_destroy(krbContext, krbCrypto);
-#endif
-
-    return major;
-}
-
 int
 rotateLeft(void *ptr, size_t bufsiz, size_t rc)
 {
@@ -325,7 +97,6 @@ unwrapStream(OM_uint32 *minor,
 {
     unsigned char *ptr;
     OM_uint32 code = 0, major = GSS_S_FAILURE;
-    krb5_context krbContext;
     int conf_req_flag;
     int i = 0, j;
     gss_iov_buffer_desc *tiov = NULL;
@@ -334,8 +105,6 @@ unwrapStream(OM_uint32 *minor,
 #ifdef HAVE_HEIMDAL_VERSION
     krb5_crypto krbCrypto = NULL;
 #endif
-
-    GSSEAP_KRB_INIT(&krbContext);
 
     GSSEAP_ASSERT(toktype == TOK_TYPE_WRAP);
 
@@ -426,21 +195,8 @@ unwrapStream(OM_uint32 *minor,
         }
 
         if (conf_req_flag) {
-            code = krbCryptoLength(krbContext, KRB_CRYPTO_CONTEXT(ctx),
-                                    KRB5_CRYPTO_TYPE_HEADER, &krbHeaderLen);
-            if (code != 0)
-                goto cleanup;
             theader->buffer.length += krbHeaderLen; /* length validated later */
         }
-
-        /* no PADDING for CFX, EC is used instead */
-        code = krbCryptoLength(krbContext, KRB_CRYPTO_CONTEXT(ctx),
-                               conf_req_flag
-                                  ? KRB5_CRYPTO_TYPE_TRAILER
-                                  : KRB5_CRYPTO_TYPE_CHECKSUM,
-                               &krbTrailerLen);
-        if (code != 0)
-            goto cleanup;
 
         ttrailer->buffer.length = ec + (conf_req_flag ? 16 : 0 /* E(Header) */) +
                                   krbTrailerLen;
@@ -482,16 +238,7 @@ unwrapStream(OM_uint32 *minor,
 
     GSSEAP_ASSERT(i <= iov_count + 2);
 
-    major = unwrapToken(&code, ctx, KRB_CRYPTO_CONTEXT(ctx),
-                        conf_state, qop_state, tiov, i, toktype);
-    if (major == GSS_S_COMPLETE) {
-        *data = *tdata;
-    } else if (tdata->type & GSS_IOV_BUFFER_FLAG_ALLOCATED) {
-        OM_uint32 tmp;
-
-        gss_release_buffer(&tmp, &tdata->buffer);
-        tdata->type &= ~(GSS_IOV_BUFFER_FLAG_ALLOCATED);
-    }
+    *data = *tdata;
 
 cleanup:
     if (tiov != NULL)
@@ -517,22 +264,8 @@ gssEapUnwrapOrVerifyMIC(OM_uint32 *minor,
 {
     OM_uint32 major;
 
-    if (ctx->encryptionType == ENCTYPE_NULL) {
-        *minor = GSSEAP_KEY_UNAVAILABLE;
-        return GSS_S_UNAVAILABLE;
-    }
-
-    if (gssEapLocateIov(iov, iov_count, GSS_IOV_BUFFER_TYPE_STREAM) != NULL) {
-        major = unwrapStream(minor, ctx, conf_state, qop_state,
-                             iov, iov_count, toktype);
-    } else {
-        major = unwrapToken(minor, ctx,
-                            NULL, /* krbCrypto */
-                            conf_state, qop_state,
-                            iov, iov_count, toktype);
-    }
-
-    return major;
+    *minor = GSSEAP_KEY_UNAVAILABLE;
+    return GSS_S_UNAVAILABLE;
 }
 
 OM_uint32 GSSAPI_CALLCONV

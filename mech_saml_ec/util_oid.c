@@ -89,59 +89,6 @@ duplicateOid(OM_uint32 *minor,
     return GSS_S_COMPLETE;
 }
 
-/* Compose an OID of a prefix and an integer suffix */
-OM_uint32
-composeOid(OM_uint32 *minor,
-           const char *prefix,
-           size_t prefix_len,
-           int suffix,
-           gss_OID_desc *oid)
-{
-    int osuffix, i;
-    size_t nbytes;
-    unsigned char *op;
-
-    if (oid == GSS_C_NO_OID) {
-        *minor = EINVAL;
-        return GSS_S_CALL_INACCESSIBLE_READ | GSS_S_FAILURE;
-    }
-
-    if (oid->length < prefix_len) {
-        *minor = GSSEAP_WRONG_SIZE;
-        return GSS_S_FAILURE;
-    }
-
-    memcpy(oid->elements, prefix, prefix_len);
-
-    nbytes = 0;
-    osuffix = suffix;
-    while (suffix) {
-        nbytes++;
-        suffix >>= 7;
-    }
-    suffix = osuffix;
-
-    if (oid->length < prefix_len + nbytes) {
-        *minor = GSSEAP_WRONG_SIZE;
-        return GSS_S_FAILURE;
-    }
-
-    op = (unsigned char *) oid->elements + prefix_len + nbytes;
-    i = -1;
-    while (suffix) {
-        op[i] = (unsigned char)suffix & 0x7f;
-        if (i != -1)
-            op[i] |= 0x80;
-        i--;
-        suffix >>= 7;
-    }
-
-    oid->length = prefix_len + nbytes;
-
-    *minor = 0;
-    return GSS_S_COMPLETE;
-}
-
 OM_uint32
 decomposeOid(OM_uint32 *minor,
              const char *prefix,

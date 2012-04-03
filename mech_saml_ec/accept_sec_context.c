@@ -48,12 +48,6 @@ acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
     VALUE_PAIR *vp;
     gss_buffer_desc nameBuf = GSS_C_EMPTY_BUFFER;
 
-    /* Cache encryption type derived from selected mechanism OID */
-    major = gssEapOidToEnctype(minor, ctx->mechanismUsed,
-                               &ctx->encryptionType);
-    if (GSS_ERROR(major))
-        return major;
-
     gssEapReleaseName(&tmpMinor, &ctx->initiatorName);
 
     major = gssEapRadiusGetRawAvp(minor, ctx->acceptorCtx.vps,
@@ -79,19 +73,6 @@ acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
         *minor = GSSEAP_KEY_UNAVAILABLE;
         return GSS_S_UNAVAILABLE;
     }
-
-    major = gssEapDeriveRfc3961Key(minor,
-                                   vp->vp_octets,
-                                   vp->length,
-                                   ctx->encryptionType,
-                                   &ctx->rfc3961Key);
-    if (GSS_ERROR(major))
-        return major;
-
-    major = rfc3961ChecksumTypeForKey(minor, &ctx->rfc3961Key,
-                                       &ctx->checksumType);
-    if (GSS_ERROR(major))
-        return major;
 
     major = sequenceInit(minor,
                          &ctx->seqState, ctx->recvSeq,
@@ -419,8 +400,6 @@ setAcceptorIdentity(OM_uint32 *minor,
         *minor = GSSEAP_BAD_SERVICE_NAME;
         return GSS_S_BAD_NAME;
     }
-
-    GSSEAP_KRB_INIT(&krbContext);
 
     krbPrinc = ctx->acceptorName->krbPrincipal;
     GSSEAP_ASSERT(krbPrinc != NULL);

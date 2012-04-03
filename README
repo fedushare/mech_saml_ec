@@ -17,4 +17,4 @@ $ ./gss-server -port 3490 test
 
 $ cd gss-sample
 $ export LD_LIBRARY_PATH=/opt/moonshot/lib64
-$ ./gss-client -port 3490 -user <username> -pass <password> -mech "{ 1 3 6 1 4 1 11591 4 6 }" localhost test testmessage
+$ ./gss-client -nw -nx -nm -port 3490 -user <username> -pass <password> -mech "{ 1 3 6 1 4 1 11591 4 6 }" localhost test testmessage

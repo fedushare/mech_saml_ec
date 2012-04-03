@@ -51,7 +51,6 @@
 
 #ifndef KRB5_AUTHDATA_PLUGIN_H_INCLUDED
 #define KRB5_AUTHDATA_PLUGIN_H_INCLUDED
-#include <krb5/krb5.h>
 
 /*
  * While arguments of these types are passed-in, for the most part a

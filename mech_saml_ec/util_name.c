@@ -213,14 +213,11 @@ gssEapImportNameInternal(OM_uint32 *minor,
                          OM_uint32 flags)
 {
     OM_uint32 major, tmpMinor;
-    krb5_context krbContext;
     unsigned char *p;
     size_t len, remain;
     gss_buffer_desc buf;
     gss_name_t name = GSS_C_NO_NAME;
     gss_OID mechanismUsed = GSS_C_NO_OID;
-
-    GSSEAP_KRB_INIT(&krbContext);
 
     p = (unsigned char *)nameBuffer->value;
     remain = nameBuffer->length;
@@ -372,7 +369,6 @@ gssEapImportName(OM_uint32 *minor,
         { GSS_C_NT_HOSTBASED_SERVICE_X,     importServiceName           },
         { GSS_C_NT_ANONYMOUS,               importAnonymousName         },
         { GSS_C_NT_EXPORT_NAME,             importExportName            },
-        { GSS_KRB5_NT_PRINCIPAL_NAME,       importUserName              },
 #ifdef HAVE_GSS_C_NT_COMPOSITE_EXPORT
         { GSS_C_NT_COMPOSITE_EXPORT,        importCompositeExportName   },
 #endif

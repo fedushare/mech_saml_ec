@@ -219,8 +219,6 @@ peerConfigInit(OM_uint32 *minor, gss_ctx_id_t ctx)
 
     GSSEAP_ASSERT(cred != GSS_C_NO_CREDENTIAL);
 
-    GSSEAP_KRB_INIT(&krbContext);
-
     eapPeerConfig->fragment_size = 1024;
 #ifdef GSSEAP_DEBUG
     wpa_debug_level = 0;
@@ -306,11 +304,6 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
         ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
 #endif
 
-    /* Cache encryption type derived from selected mechanism OID */
-    major = gssEapOidToEnctype(minor, ctx->mechanismUsed, &ctx->encryptionType);
-    if (GSS_ERROR(major))
-        return major;
-
     if (!eap_key_available(ctx->initiatorCtx.eap)) {
         *minor = GSSEAP_KEY_UNAVAILABLE;
         return GSS_S_UNAVAILABLE;
@@ -322,19 +315,6 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
         *minor = GSSEAP_KEY_TOO_SHORT;
         return GSS_S_UNAVAILABLE;
     }
-
-    major = gssEapDeriveRfc3961Key(minor,
-                                   &key[EAP_EMSK_LEN / 2],
-                                   EAP_EMSK_LEN / 2,
-                                   ctx->encryptionType,
-                                   &ctx->rfc3961Key);
-       if (GSS_ERROR(major))
-           return major;
-
-    major = rfc3961ChecksumTypeForKey(minor, &ctx->rfc3961Key,
-                                      &ctx->checksumType);
-    if (GSS_ERROR(major))
-        return major;
 
     major = sequenceInit(minor,
                          &ctx->seqState,
@@ -827,7 +807,7 @@ eapGssSmInitGssChannelBindings(OM_uint32 *minor,
     if (chanBindings != GSS_C_NO_CHANNEL_BINDINGS)
         buffer = chanBindings->application_data;
 
-    major = gssEapWrap(minor, ctx, TRUE, GSS_C_QOP_DEFAULT,
+    major = gssEapWrap(minor, ctx, 1, GSS_C_QOP_DEFAULT,
                        &buffer, NULL, outputToken);
     if (GSS_ERROR(major))
         return major;

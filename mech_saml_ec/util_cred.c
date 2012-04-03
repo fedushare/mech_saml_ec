@@ -85,13 +85,10 @@ gssEapReleaseCred(OM_uint32 *minor, gss_cred_id_t *pCred)
 {
     OM_uint32 tmpMinor;
     gss_cred_id_t cred = *pCred;
-    krb5_context krbContext = NULL;
 
     if (cred == GSS_C_NO_CREDENTIAL) {
         return GSS_S_COMPLETE;
     }
-
-    GSSEAP_KRB_INIT(&krbContext);
 
     gssEapReleaseName(&tmpMinor, &cred->name);
     gssEapReleaseName(&tmpMinor, &cred->target);
@@ -343,7 +340,7 @@ gssEapCredAvailable(gss_cred_id_t cred, gss_OID mech)
     GSSEAP_ASSERT(mech != GSS_C_NO_OID);
 
     if (cred == GSS_C_NO_CREDENTIAL || cred->mechanisms == GSS_C_NO_OID_SET)
-        return TRUE;
+        return 1;
 
     gss_test_oid_set_member(&minor, mech, cred->mechanisms, &present);
 
@@ -629,7 +626,7 @@ staticIdentityFileResolveInitiatorCred(OM_uint32 *minor, gss_cred_id_t cred)
     gss_buffer_desc defaultIdentity = GSS_C_EMPTY_BUFFER;
     gss_name_t defaultIdentityName = GSS_C_NO_NAME;
     gss_buffer_desc defaultPassword = GSS_C_EMPTY_BUFFER;
-    int isDefaultIdentity = FALSE;
+    int isDefaultIdentity = 0;
 
     major = readStaticIdentityFile(minor, &defaultIdentity, &defaultPassword);
     if (GSS_ERROR(major))
@@ -650,7 +647,7 @@ staticIdentityFileResolveInitiatorCred(OM_uint32 *minor, gss_cred_id_t cred)
         if (cred->name == GSS_C_NO_NAME) {
             cred->name = defaultIdentityName;
             defaultIdentityName = GSS_C_NO_NAME;
-            isDefaultIdentity = TRUE;
+            isDefaultIdentity = 1;
         } else {
             major = gssEapCompareName(minor, cred->name,
                                       defaultIdentityName, &isDefaultIdentity);

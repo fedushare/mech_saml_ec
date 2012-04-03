@@ -140,124 +140,20 @@ gssEapValidateMechs(OM_uint32 *minor,
 }
 
 OM_uint32
-gssEapOidToEnctype(OM_uint32 *minor,
-                   const gss_OID oid,
-                   krb5_enctype *enctype)
-{
-    OM_uint32 major;
-    int suffix;
-
-    major = decomposeOid(minor,
-#ifdef MECH_EAP
-                         GSS_EAP_MECHANISM->elements,
-                         GSS_EAP_MECHANISM->length,
-#else
-                         GSS_SAMLEC_MECHANISM->elements,
-                         GSS_SAMLEC_MECHANISM->length,
-#endif
-                         oid,
-                         &suffix);
-    if (major == GSS_S_COMPLETE)
-        *enctype = suffix;
-
-    return major;
-}
-
-OM_uint32
-gssEapEnctypeToOid(OM_uint32 *minor,
-                   krb5_enctype enctype,
-                   gss_OID *pOid)
-{
-    OM_uint32 major;
-    gss_OID oid;
-
-    *pOid = NULL;
-
-    oid = (gss_OID)GSSEAP_MALLOC(sizeof(*oid));
-    if (oid == NULL) {
-        *minor = ENOMEM;
-        return GSS_S_FAILURE;
-    }
-
-#ifdef MECH_EAP
-    oid->length = GSS_EAP_MECHANISM->length + 1;
-#else
-    oid->length = GSS_SAMLEC_MECHANISM->length + 1;
-#endif
-    oid->elements = GSSEAP_MALLOC(oid->length);
-    if (oid->elements == NULL) {
-        *minor = ENOMEM;
-        GSSEAP_FREE(oid);
-        return GSS_S_FAILURE;
-    }
-
-    major = composeOid(minor,
-#ifdef MECH_EAP
-                       GSS_EAP_MECHANISM->elements,
-                       GSS_EAP_MECHANISM->length,
-#else
-                       GSS_SAMLEC_MECHANISM->elements,
-                       GSS_SAMLEC_MECHANISM->length,
-#endif
-                       enctype,
-                       oid);
-    if (major == GSS_S_COMPLETE) {
-        internalizeOid(oid, pOid);
-        *pOid = oid;
-    } else {
-        GSSEAP_FREE(oid->elements);
-        GSSEAP_FREE(oid);
-    }
-
-    return major;
-}
-
-OM_uint32
 gssEapIndicateMechs(OM_uint32 *minor,
                     gss_OID_set *mechs)
 {
-    krb5_context krbContext;
     OM_uint32 major;
-    krb5_enctype *etypes;
-    int i;
-
-    GSSEAP_KRB_INIT(&krbContext);
-
-    *minor = krb5_get_permitted_enctypes(krbContext, &etypes);
-    if (*minor != 0) {
-        return GSS_S_FAILURE;
-    }
 
     major = gss_create_empty_oid_set(minor, mechs);
     if (GSS_ERROR(major)) {
-        GSSEAP_FREE(etypes);
         return major;
     }
 
-    for (i = 0; etypes[i] != ENCTYPE_NULL; i++) {
-        gss_OID mechOid;
-#ifndef HAVE_HEIMDAL_VERSION
-        OM_uint32 tmpMinor;
-#endif
-
-        /* XXX currently we aren't equipped to encode these enctypes */
-        if (etypes[i] < 0 || etypes[i] > 127)
-            continue;
-
-        major = gssEapEnctypeToOid(minor, etypes[i], &mechOid);
-        if (GSS_ERROR(major))
-            break;
-
-        major = gss_add_oid_set_member(minor, mechOid, mechs);
-        if (GSS_ERROR(major))
-            break;
-
-#ifndef HAVE_HEIMDAL_VERSION
-        gss_release_oid(&tmpMinor, &mechOid);
-#endif
+    major = gss_add_oid_set_member(minor, GSS_SAMLEC_MECHANISM, mechs);
+    if (GSS_ERROR(major)) {
+        return major;
     }
-
-    GSSEAP_FREE(etypes);
 
     *minor = 0;
     return major;

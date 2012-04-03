@@ -116,13 +116,10 @@ gssEapReleaseContext(OM_uint32 *minor,
 {
     OM_uint32 tmpMinor;
     gss_ctx_id_t ctx = *pCtx;
-    krb5_context krbContext = NULL;
 
     if (ctx == GSS_C_NO_CONTEXT) {
         return GSS_S_COMPLETE;
     }
-
-    gssEapKerberosInit(&tmpMinor, &krbContext);
 
     if (CTX_IS_INITIATOR(ctx)) {
         releaseInitiatorContext(&ctx->initiatorCtx);
@@ -133,7 +130,6 @@ gssEapReleaseContext(OM_uint32 *minor,
     }
 #endif /* GSSEAP_ENABLE_ACCEPTOR */
 
-    krb5_free_keyblock_contents(krbContext, &ctx->rfc3961Key);
     gssEapReleaseName(&tmpMinor, &ctx->initiatorName);
     gssEapReleaseName(&tmpMinor, &ctx->acceptorName);
     gssEapReleaseOid(&tmpMinor, &ctx->mechanismUsed);
@@ -338,7 +334,7 @@ gssEapMakeOrVerifyTokenMIC(OM_uint32 *minor,
                                         iov, i, TOK_TYPE_MIC);
     } else {
         iov[i++].type = GSS_IOV_BUFFER_TYPE_HEADER | GSS_IOV_BUFFER_FLAG_ALLOCATE;
-        major = gssEapWrapOrGetMIC(minor, ctx, FALSE, NULL,
+        major = gssEapWrapOrGetMIC(minor, ctx, 0, NULL,
                                    iov, i, TOK_TYPE_MIC);
         if (!GSS_ERROR(major))
             *tokenMIC = iov[i - 1].buffer;
@@ -363,7 +359,7 @@ gssEapMakeTokenMIC(OM_uint32 *minor,
     tokenMIC->length = 0;
     tokenMIC->value = NULL;
 
-    return gssEapMakeOrVerifyTokenMIC(minor, ctx, tokenMIC, FALSE);
+    return gssEapMakeOrVerifyTokenMIC(minor, ctx, tokenMIC, 0);
 }
 
 OM_uint32
@@ -376,5 +372,5 @@ gssEapVerifyTokenMIC(OM_uint32 *minor,
         return GSS_S_BAD_SIG;
     }
 
-    return gssEapMakeOrVerifyTokenMIC(minor, ctx, tokenMIC, TRUE);
+    return gssEapMakeOrVerifyTokenMIC(minor, ctx, tokenMIC, 1);
 }

@@ -111,7 +111,6 @@ gssEapExportSecContext(OM_uint32 *minor,
     gss_buffer_desc initiatorName = GSS_C_EMPTY_BUFFER;
     gss_buffer_desc acceptorName = GSS_C_EMPTY_BUFFER;
     gss_buffer_desc partialCtx = GSS_C_EMPTY_BUFFER;
-    gss_buffer_desc key;
     unsigned char *p;
 
     if ((CTX_IS_INITIATOR(ctx) && !CTX_IS_ESTABLISHED(ctx)) ||
@@ -119,9 +118,6 @@ gssEapExportSecContext(OM_uint32 *minor,
         *minor = GSSEAP_CONTEXT_INCOMPLETE;
         return GSS_S_NO_CONTEXT;
     }
-
-    key.length = KRB_KEY_LENGTH(&ctx->rfc3961Key);
-    key.value  = KRB_KEY_DATA(&ctx->rfc3961Key);
 
     if (ctx->initiatorName != GSS_C_NO_NAME) {
         major = gssEapExportNameInternal(minor, ctx->initiatorName,
@@ -154,7 +150,6 @@ gssEapExportSecContext(OM_uint32 *minor,
 
     length  = 16;                               /* version, state, flags, */
     length += 4 + ctx->mechanismUsed->length;   /* mechanismUsed */
-    length += 12 + key.length;                  /* rfc3961Key.value */
     length += 4 + initiatorName.length;         /* initiatorName.value */
     length += 4 + acceptorName.length;          /* acceptorName.value */
     length += 24 + sequenceSize(ctx->seqState); /* seqState */
@@ -178,12 +173,8 @@ gssEapExportSecContext(OM_uint32 *minor,
     store_uint32_be(ctx->gssFlags,         &p[12]);
     p = store_oid(ctx->mechanismUsed,      &p[16]);
 
-    store_uint32_be(ctx->checksumType,     &p[0]);
-    store_uint32_be(ctx->encryptionType,   &p[4]);
-    p = store_buffer(&key,                 &p[8], FALSE);
-
-    p = store_buffer(&initiatorName,       p, FALSE);
-    p = store_buffer(&acceptorName,        p, FALSE);
+    p = store_buffer(&initiatorName,       p, 0);
+    p = store_buffer(&acceptorName,        p, 0);
 
     store_uint64_be(ctx->expiryTime,       &p[0]);
     store_uint64_be(ctx->sendSeq,          &p[8]);
@@ -195,7 +186,7 @@ gssEapExportSecContext(OM_uint32 *minor,
         goto cleanup;
 
     if (partialCtx.value != NULL)
-        p = store_buffer(&partialCtx, p, FALSE);
+        p = store_buffer(&partialCtx, p, 0);
 
     GSSEAP_ASSERT(p == (unsigned char *)token->value + token->length);
 

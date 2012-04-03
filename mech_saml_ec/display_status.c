@@ -152,19 +152,12 @@ gssEapDisplayStatus(OM_uint32 *minor,
                     gss_buffer_t status_string)
 {
     OM_uint32 major;
-    krb5_context krbContext = NULL;
     const char *errMsg;
 
     status_string->length = 0;
     status_string->value = NULL;
 
     errMsg = getStatusInfo(status_value);
-    if (errMsg == NULL) {
-        GSSEAP_KRB_INIT(&krbContext);
-
-        /* Try the com_err message */
-        errMsg = krb5_get_error_message(krbContext, status_value);
-    }
 
     if (errMsg != NULL) {
         major = makeStringBuffer(minor, errMsg, status_string);
@@ -172,9 +165,6 @@ gssEapDisplayStatus(OM_uint32 *minor,
         major = GSS_S_COMPLETE;
         *minor = 0;
     }
-
-    if (krbContext != NULL)
-        krb5_free_error_message(krbContext, errMsg);
 
     return major;
 }

@@ -34,7 +34,6 @@ gss_inquire_saslname_for_mech
 gss_inquire_sec_context_by_oid
 gss_map_name_to_any
 gss_process_context_token
-gss_pseudo_random
 gss_query_mechanism_info
 gss_query_meta_data
 gss_release_any_name_mapping

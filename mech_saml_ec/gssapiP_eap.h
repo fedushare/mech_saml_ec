@@ -66,7 +66,6 @@
 
 /* GSS headers */
 #include <gssapi/gssapi.h>
-#include <gssapi/gssapi_krb5.h>
 #ifdef HAVE_HEIMDAL_VERSION
 typedef struct gss_any *gss_any_t;
 #else
@@ -78,11 +77,8 @@ typedef struct gss_any *gss_any_t;
 typedef const gss_OID_desc *gss_const_OID;
 #endif
 
-/* Kerberos headers */
-#include <krb5.h>
 
 #ifdef GSSEAP_ENABLE_ACCEPTOR
-/* FreeRADIUS headers */
 #ifdef __cplusplus
 extern "C" {
 #ifndef WIN32
@@ -205,9 +201,6 @@ struct gss_ctx_id_struct
     OM_uint32 flags;
     OM_uint32 gssFlags;
     gss_OID mechanismUsed;
-    krb5_cksumtype checksumType;
-    krb5_enctype encryptionType;
-    krb5_keyblock rfc3961Key;
     gss_name_t initiatorName;
     gss_name_t acceptorName;
     time_t expiryTime;

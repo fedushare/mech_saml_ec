@@ -88,7 +88,6 @@ mech_saml_ec_la_SOURCES =    			\
 	inquire_saslname_for_mech.c		\
 	inquire_sec_context_by_oid.c		\
 	process_context_token.c			\
-	pseudo_random.c				\
 	query_mechanism_info.c			\
 	query_meta_data.c			\
 	release_cred.c				\
@@ -101,11 +100,8 @@ mech_saml_ec_la_SOURCES =    			\
 	unwrap_iov.c				\
 	util_buffer.c				\
 	util_context.c				\
-	util_cksum.c				\
 	util_cred.c				\
 	util_crypt.c				\
-	util_krb.c				\
-	util_lucid.c				\
 	util_mech.c				\
 	util_name.c				\
 	util_oid.c				\

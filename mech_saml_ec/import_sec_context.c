@@ -147,67 +147,6 @@ importMechanismOid(OM_uint32 *minor,
 }
 
 static OM_uint32
-importKerberosKey(OM_uint32 *minor,
-                  unsigned char **pBuf,
-                  size_t *pRemain,
-                  krb5_cksumtype *checksumType,
-                  krb5_enctype *pEncryptionType,
-                  krb5_keyblock *pKey)
-{
-    unsigned char *p = *pBuf;
-    size_t remain = *pRemain;
-    OM_uint32 encryptionType;
-    OM_uint32 length;
-    krb5_context krbContext;
-    krb5_keyblock key;
-    krb5_error_code code;
-
-    GSSEAP_KRB_INIT(&krbContext);
-
-    KRB_KEY_INIT(pKey);
-
-    if (remain < 12) {
-        *minor = GSSEAP_TOK_TRUNC;
-        return GSS_S_DEFECTIVE_TOKEN;
-    }
-
-    *checksumType  = load_uint32_be(&p[0]);
-    encryptionType = load_uint32_be(&p[4]);
-    length         = load_uint32_be(&p[8]);
-
-    if ((length != 0) != (encryptionType != ENCTYPE_NULL)) {
-        *minor = GSSEAP_BAD_CONTEXT_TOKEN;
-        return GSS_S_DEFECTIVE_TOKEN;
-    }
-
-    if (remain - 12 < length) {
-        *minor = GSSEAP_TOK_TRUNC;
-        return GSS_S_DEFECTIVE_TOKEN;
-    }
-
-    if (encryptionType != ENCTYPE_NULL) {
-        KRB_KEY_INIT(&key);
-
-        KRB_KEY_TYPE(&key)   = encryptionType;
-        KRB_KEY_LENGTH(&key) = length;
-        KRB_KEY_DATA(&key)   = &p[12];
-
-        code = krb5_copy_keyblock_contents(krbContext, &key, pKey);
-        if (code != 0) {
-            *minor = code;
-            return GSS_S_FAILURE;
-        }
-    }
-
-    *pBuf    += 12 + length;
-    *pRemain -= 12 + length;
-    *pEncryptionType = encryptionType;
-
-    *minor = 0;
-    return GSS_S_COMPLETE;
-}
-
-static OM_uint32
 importName(OM_uint32 *minor,
            unsigned char **pBuf,
            size_t *pRemain,
@@ -278,13 +217,6 @@ gssEapImportContext(OM_uint32 *minor,
         return GSS_S_DEFECTIVE_TOKEN;
 
     major = importMechanismOid(minor, &p, &remain, &ctx->mechanismUsed);
-    if (GSS_ERROR(major))
-        return major;
-
-    major = importKerberosKey(minor, &p, &remain,
-                              &ctx->checksumType,
-                              &ctx->encryptionType,
-                              &ctx->rfc3961Key);
     if (GSS_ERROR(major))
         return major;
 

@@ -42,17 +42,9 @@ gssQueryMechanismInfo(OM_uint32 *minor,
                       unsigned char auth_scheme[16])
 {
     OM_uint32 major;
-    krb5_enctype enctype;
 
-    major = gssEapOidToEnctype(minor, (const gss_OID)mech_oid, &enctype);
-    if (GSS_ERROR(major))
-        return major;
-
-    /* the enctype is encoded in the increasing part of the GUID */
     memcpy(auth_scheme,
            "\x39\xd7\x7d\x00\xe5\x00\x11\xe0\xac\x64\xcd\x53\x46\x50\xac\xb9", 16);
-
-    auth_scheme[3] = (unsigned char)enctype;
 
     *minor = 0;
     return GSS_S_COMPLETE;
