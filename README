@@ -1,20 +1,29 @@
 
 Making Library:
 
-$ ./autogen.sh
-$ ./configure --with-opensaml=/opt/moonshot/ --with-shibresolver=/opt/moonshot/ --with-shibsp=/opt/moonshot/
-$ make
+# ./autogen.sh
+# ./configure --with-opensaml=/opt/moonshot/ --with-shibresolver=/opt/moonshot/ --with-shibsp=/opt/moonshot/
+# make
 
 Testing Library with MIT GSS example programs:
 
-1. Start Server as follows.
+1. Start Server as follows. In one window, run:
 
-$ cd gss-sample
-$ export LD_LIBRARY_PATH=/opt/moonshot/lib64
-$ ./gss-server -port 3490 test
+# ./testserver.sh
 
-2. Invoke client as follows.
+   - OR -
 
-$ cd gss-sample
-$ export LD_LIBRARY_PATH=/opt/moonshot/lib64
-$ ./gss-client -nw -nx -nm -port 3490 -user <username> -pass <password> -mech "{ 1 3 6 1 4 1 11591 4 6 }" localhost test testmessage
+# cd gss-sample
+# export LD_LIBRARY_PATH=/opt/moonshot/lib64
+# ./gss-server -port 3490 test
+
+
+2. Invoke client as follows. In a second window, run:
+
+# ./testclient.sh <username> <password>
+
+   - OR -
+
+# cd gss-sample
+# export LD_LIBRARY_PATH=/opt/moonshot/lib64
+# ./gss-client -nw -nx -nm -port 3490 -user <username> -pass <password> -mech "{ 1 3 6 1 4 1 11591 4 6 }" localhost test testmessage
