@@ -202,3 +202,12 @@ extern "C" const char* getSAMLRequest2(void)
 
     return retstr.c_str();
 }
+
+extern "C" int verifySAMLResponse(const char* saml, int len) 
+{
+    int retbool = 1;
+
+
+    return retbool;
+}
+

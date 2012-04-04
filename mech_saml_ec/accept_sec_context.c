@@ -969,9 +969,20 @@ gssEapAcceptSecContext(OM_uint32 *minor,
  *          ctx->expiryTime (0 for indefinite)
  */
         }
+        printf("-------------BEGIN DEBUG----------\n");
+        int result = verifySAMLResponse((char*)input_token->value,
+                                        (int)input_token->length);
+        /* TODO: Return username in third parameter. */
+        printf(input_token->value);
+        printf("-------------END DEBUG----------\n");
 
         /* ASSUME Assertion is Good for now !!! */
-        major = GSS_S_COMPLETE;
+        if (result) {
+            major = GSS_S_COMPLETE;
+        } else {
+            major = GSS_S_FAILURE;
+            *minor = GSSEAP_PEER_AUTH_FAILURE;
+        }
     }
 #endif
     if (GSS_ERROR(major))
