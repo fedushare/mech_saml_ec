@@ -37,6 +37,8 @@
 
 #include "gssapiP_eap.h"
 
+const char* getSAMLRequest2(void);
+
 #if MECH_EAP
 /*
  * Mark an acceptor context as ready for cryptographic operations
@@ -283,7 +285,7 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
     wpabuf_free(reqData);
 #else
     /* major = makeStringBuffer(minor, "SAML_AUTHREQUEST", outputToken); */
-    saml_req = getSAMLRequest();
+    saml_req = getSAMLRequest2();
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
     fprintf(stderr, "SENDING SAML_AUTHREQUEST\n");
 #endif
@@ -946,7 +948,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         /* TODO innerToken must either be NULL or have meaningful content */
         if (!GSS_ERROR(major)) {
             GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
-            saml_req = getSAMLRequest();
+            saml_req = getSAMLRequest2();
             /* TODO VSY: we should really err out on saml_req being NULL */
             major = makeStringBuffer(minor, saml_req?:"", output_token);
             fprintf(stderr, "SENDING SAML_AUTHREQUEST\n");
