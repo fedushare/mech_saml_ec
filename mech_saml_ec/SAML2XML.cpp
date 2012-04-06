@@ -18,6 +18,9 @@
 #include <xmltooling/util/XMLConstants.h>
 #include <iostream>
 #include <sstream>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 using namespace opensaml;
 using namespace opensaml::saml2;
@@ -31,11 +34,54 @@ using namespace xmlconstants;
 using namespace xmltooling;
 using namespace std;
 
+// Taken from http://stackoverflow.com/questions/504810/
+const char* getfqdn() 
+{
+    const char* retstr;
+    struct addrinfo hints, *info, *p;
+    int gai_result;
+
+    char hostname[1024];
+    hostname[1023] = '\0';
+    gethostname(hostname, 1023);
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC; /*either IPV4 or IPV6*/
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_CANONNAME;
+
+    if ((gai_result = getaddrinfo(hostname, "http", &hints, &info)) != 0) {
+        retstr = "localhost";
+    }
+
+    for (p = info; p != NULL; p = p->ai_next) {
+        retstr = p->ai_canonname;
+    }
+    return retstr;
+}
+
+// Taken from AbstractHandler.cpp
+void generateRandomHex(std::string& buf, unsigned int len) {
+    static char DIGITS[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    int r;
+    unsigned char b1,b2;
+    buf.erase();
+    for (unsigned int i=0; i<len; i+=4) {
+        r = rand();
+        b1 = (0x00FF & r);
+        b2 = (0xFF00 & r)  >> 8;
+        buf += (DIGITS[(0xF0 & b1) >> 4 ]);
+        buf += (DIGITS[0x0F & b1]);
+        buf += (DIGITS[(0xF0 & b2) >> 4 ]);
+        buf += (DIGITS[0x0F & b2]);
+    }
+}
 
 extern "C" const char* getSAMLRequest2(void)
 {
     string retstr = "";
 
+    // Initialization code taken from resolvertest.cpp::main()
     SPConfig& conf = SPConfig::getConfig();
     conf.setFeatures(
         SPConfig::Metadata |
@@ -53,30 +99,32 @@ extern "C" const char* getSAMLRequest2(void)
             const Application* app = sp->getApplication("default");
             if (app) {
 
-                MetadataProvider* m = app->getMetadataProvider();
-                pair<const EntityDescriptor*,const RoleDescriptor*> entity = 
-                    pair<const EntityDescriptor*,const RoleDescriptor*>(nullptr,nullptr);
-                const IDPSSODescriptor* role = nullptr;
-                const EndpointType* ep = nullptr;
-                const MessageEncoder* encoder = nullptr;
-
-                Locker mlocker(m);
-
-                // Taken from constructor of SAML2SessionInitiator
+                // Taken from constructor SAML2SessionInitiator::SAML2SessionInitiator()
                 // BUT, e is "const DOMElement*" and I have no idea what
                 // actually calls the constructor, so no idea what 'e' is.
                 // Thus the encoder may be incomplete.
                 DOMElement* e;
+                const MessageEncoder* encoder = nullptr;
                 try {
                     encoder = SAMLConfig::getConfig().MessageEncoderManager.newPlugin(SAML20_BINDING_PAOS, pair<const DOMElement*,const XMLCh*>(e,nullptr));
                 } catch (exception & ex) {
                 }
                 
-                // Now in doRequest
+                // Now in SAML2SessionInitiator::doRequest()
+                pair<const EntityDescriptor*,const RoleDescriptor*> entity = 
+                    pair<const EntityDescriptor*,const RoleDescriptor*>(nullptr,nullptr);
+                const IDPSSODescriptor* role = nullptr;
+                const EndpointType* ep = nullptr;
 
-                /*
-                preserveRelayState(app, httpResponse, relayState);
-                 */
+                MetadataProvider* m = app->getMetadataProvider();
+                Locker mlocker(m);
+
+                // Taken from AbstractHandler.cpp Handler::preserveRelayState()
+                string relayStateStr;
+                string rsKey;
+                generateRandomHex(rsKey,5);
+                relayStateStr = "cookie:" + rsKey;
+                const char* relayState = relayStateStr.c_str();
 
                 // Get the AssertionConsumerService
                 const Handler* ACS=nullptr;
@@ -87,11 +135,69 @@ extern "C" const char* getSAMLRequest2(void)
                 // Build up AuthnRequest section of the SOAP message
                 auto_ptr<AuthnRequest> request(AuthnRequestBuilder::buildAuthnRequest());
                 
-                // NEED SOME WAY TO GET handlerURL for setAssertionConsumerServiceURL()
-                //     string ACSloc = request.getHandlerURL(target.c_str());
-                //     const char* acsLocation = ACSloc.c_str();
-                // For now, set to a static string
-                auto_ptr_XMLCh acsLocation("https://test.cilogon.org/Shibboleth.sso/SAML2/ECP");
+                // Taken from AbstractSPRequest::getHandlerURL()
+                string m_handlerURL;
+                const char* fqdn = getfqdn();
+                string resourcestr;
+                const char* resource;
+                resourcestr = "https://" + string(fqdn) + "opensaml-2.5/samltest/saml2/core/impl/AuthnRequest20Test.h/";
+                resource = resourcestr.c_str();
+                const char* handler = nullptr;
+                const PropertySet* props = app->getPropertySet("Sessions");
+                if (props) {
+                    pair<bool,const char*> p2 = props->getString("handlerURL");
+                    if (p2.first) {
+                        handler = p2.second;
+                    }
+                }
+
+                if (!handler) {
+                    handler = "/Shibboleth.sso";
+                } else if (*handler!='/' && strncmp(handler,"http:",5) && strncmp(handler,"https:",6)) {
+                    throw XMLToolingException(
+                          "Invalid handlerURL property <Sessions> element for Application");
+                }
+
+                const char* path = nullptr;
+                const char* prot;
+                if (*handler != '/') {
+                    prot = handler;
+                } else {
+                    prot = resource;
+                    path = handler;
+                }
+
+                // break apart the "protocol" string into protocol, host, and "the rest"
+                const char* colon=strchr(prot,':');
+                colon += 3;
+                const char* slash=strchr(colon,'/');
+                if (!path) {
+                    path = slash;
+                }
+
+                // Compute the actual protocol and store in m_handlerURL.
+                m_handlerURL.assign("https://");
+                // create the "host" from either the colon/slash or from the target string
+                // If prot == handler then we're in either #1 or #2, else #3.
+                // If slash == colon then we're in #2.
+                if (prot != handler || slash == colon) {
+                    colon = strchr(resource, ':');
+                    colon += 3;      // Get past the ://
+                    slash = strchr(colon, '/');
+                }
+                string host(colon, (slash ? slash-colon : strlen(colon)));
+
+                // Build the handler URL
+                m_handlerURL += host + path;
+                // END code from AbstractSPRequest::getHandlerURL()
+
+                pair<bool,const char*> prop;
+                prop = ACS->getString("Location");
+                if (prop.first) {
+                    m_handlerURL += prop.second;
+                }
+
+                auto_ptr_XMLCh acsLocation(m_handlerURL.c_str());
                 request->setAssertionConsumerServiceURL(acsLocation.get());
 
                 Issuer* issuer = IssuerBuilder::buildIssuer();
@@ -117,10 +223,9 @@ extern "C" const char* getSAMLRequest2(void)
                 const EntityDescriptor* entity2 = nullptr;
                 const PropertySet* relyingParty = app->getRelyingParty(entity2);
                 pair<bool,const char*> flag = relyingParty->getString("signing");
-                // Make an unsigned request
+                // Call into opensaml's SAML2ECPEncoder.cpp
                 // return encoder.encode(httpResponse,requestobj,dest.get()[=nullptr],
                 //                       entity2[=nullptr],relayState.c_str(),&app)
-                // Call into opensaml's SAML2ECPEncoder.cpp
                 Envelope* env = EnvelopeBuilder::buildEnvelope();
                 Header* header = HeaderBuilder::buildHeader();
                 env->setHeader(header);
@@ -158,8 +263,6 @@ extern "C" const char* getSAMLRequest2(void)
                     hdrblock->getUnknownXMLObjects().push_back(request->getScoping()->getIDPList()->clone());
                 header->getUnknownXMLObjects().push_back(hdrblock);
 
-                // NEED relaystate for the following section
-                /*
                 if (relayState && *relayState) {
                     // Create ecp:RelayState header.
                     static const XMLCh RelayState[] = UNICODE_LITERAL_10(R,e,l,a,y,S,t,a,t,e);
@@ -170,7 +273,6 @@ extern "C" const char* getSAMLRequest2(void)
                     hdrblock->setTextContent(rs.get());
                     header->getUnknownXMLObjects().push_back(hdrblock);
                 }
-                */
 
                 try {
                     DOMElement* rootElement = nullptr;
