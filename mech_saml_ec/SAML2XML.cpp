@@ -120,7 +120,7 @@ extern "C" const char* getSAMLRequest2(void)
                 Locker mlocker(m);
 
                 // Taken from AbstractHandler.cpp Handler::preserveRelayState()
-                string relayStateStr;
+                string relayStateStr = "";
                 string rsKey;
                 generateRandomHex(rsKey,5);
                 relayStateStr = "cookie:" + rsKey;
@@ -140,7 +140,7 @@ extern "C" const char* getSAMLRequest2(void)
                 const char* fqdn = getfqdn();
                 string resourcestr;
                 const char* resource;
-                resourcestr = "https://" + string(fqdn) + "opensaml-2.5/samltest/saml2/core/impl/AuthnRequest20Test.h/";
+                resourcestr = "https://" + string(fqdn) + "/";
                 resource = resourcestr.c_str();
                 const char* handler = nullptr;
                 const PropertySet* props = app->getPropertySet("Sessions");
@@ -197,6 +197,7 @@ extern "C" const char* getSAMLRequest2(void)
                     m_handlerURL += prop.second;
                 }
 
+                // auto_ptr_XMLCh acsLocation("https://test.cilogon.org/Shibboleth.sso/SAML2/ECP");
                 auto_ptr_XMLCh acsLocation(m_handlerURL.c_str());
                 request->setAssertionConsumerServiceURL(acsLocation.get());
 
