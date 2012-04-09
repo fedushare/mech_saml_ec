@@ -197,8 +197,8 @@ extern "C" const char* getSAMLRequest2(void)
                     m_handlerURL += prop.second;
                 }
 
-                auto_ptr_XMLCh acsLocation("https://test.cilogon.org/Shibboleth.sso/SAML2/ECP");
-                // auto_ptr_XMLCh acsLocation(m_handlerURL.c_str());
+                // auto_ptr_XMLCh acsLocation("https://test.cilogon.org/Shibboleth.sso/SAML2/ECP");
+                auto_ptr_XMLCh acsLocation(m_handlerURL.c_str());
                 request->setAssertionConsumerServiceURL(acsLocation.get());
 
                 Issuer* issuer = IssuerBuilder::buildIssuer();
