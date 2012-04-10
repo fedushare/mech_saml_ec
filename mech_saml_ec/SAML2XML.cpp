@@ -303,7 +303,10 @@ extern "C" const char* getSAMLRequest2(void)
         conf.term();
     }
 
-    return retstr.c_str();
+    cout << endl << "getSAMLRequest2 returning:" 
+	 << endl << retstr.c_str() << endl;
+    char *str = strdup(retstr.c_str()); // deal with memory leak please
+    return str;
 }
 
 extern "C" int verifySAMLResponse(const char* saml, int len) 

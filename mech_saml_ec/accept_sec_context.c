@@ -286,8 +286,9 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 #else
     /* major = makeStringBuffer(minor, "SAML_AUTHREQUEST", outputToken); */
     saml_req = getSAMLRequest2();
+    fprintf(stderr, "HELLO HELLO HELLO returned %s\n", saml_req);
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
-    fprintf(stderr, "SENDING SAML_AUTHREQUEST\n");
+    fprintf(stderr, "SENDING SAML_AUTHREQUEST: %s\n", (char *)outputToken->value);
 #endif
 
     GSSEAP_SM_TRANSITION_NEXT(ctx);
@@ -950,8 +951,9 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
             saml_req = getSAMLRequest2();
             /* TODO VSY: we should really err out on saml_req being NULL */
+	    fprintf(stderr, "HELLO GOODBYE getSAMLReq2 returned %s\n", saml_req);
             major = makeStringBuffer(minor, saml_req?:"", output_token);
-            fprintf(stderr, "SENDING SAML_AUTHREQUEST\n");
+            fprintf(stderr, "SENDING SAML_AUTHREQUEST: %s\n", (char *)output_token->value);
             if (!GSS_ERROR(major))
                 major = GSS_S_CONTINUE_NEEDED;
         }
