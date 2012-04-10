@@ -37,7 +37,8 @@
 
 #include "gssapiP_eap.h"
 
-const char* getSAMLRequest2(void);
+char* getSAMLRequest2(void);
+int verifySAMLResponse(const char*,int);
 
 #if MECH_EAP
 /*
@@ -150,57 +151,6 @@ eapGssSmAcceptVendorInfo(OM_uint32 *minor,
 }
 #endif
 
-#ifndef MECH_EAP
-char *saml_req_part1 = "<?xml version=\"1.0\"?>"
-"<S:Envelope"
-"  xmlns:S=\"http://schemas.xmlsoap.org/soap/envelope/\">"
-"    <S:Header>"
-"      <paos:Request"
-"        xmlns:paos=\"urn:liberty:paos:2003-08\""
-"         S:actor=\"http://schemas.xmlsoap.org/soap/actor/next\""
-"         S:mustUnderstand=\"1\""
-"         responseConsumerURL=\"https://test.cilogon.org/Shibboleth.sso/SAML2/ECP\""
-"         service=\"urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp\""
-"      />"
-"      <ecp:Request"
-"        xmlns:ecp=\"urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp\""
-"         IsPassive=\"0\""
-"         S:actor=\"http://schemas.xmlsoap.org/soap/actor/next\""
-"         S:mustUnderstand=\"1\">"
-"          <saml:Issuer"
-"            xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">"
-"              https://cilogon.org/shibboleth"
-"          </saml:Issuer>"
-"      </ecp:Request>"
-"      <ecp:RelayState"
-"        xmlns:ecp=\"urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp\""
-"        S:actor=\"http://schemas.xmlsoap.org/soap/actor/next\""
-"        S:mustUnderstand=\"1\">"
-"          cookie:24129bd5"
-"      </ecp:RelayState>"
-"    </S:Header>"
-"    <S:Body>"
-"        <samlp:AuthnRequest"
-"          xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\""
-"           AssertionConsumerServiceURL=\"https://test.cilogon.org/Shibboleth.sso/SAML2/ECP\""
-"           ID=\"";
-
-char *saml_req_part2 = "\" IssueInstant=\"";
-
-char *saml_req_part3 = "\" ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:PAOS\""
-"           Version=\"2.0\">"
-"            <saml:Issuer"
-"              xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">"
-"                https://cilogon.org/shibboleth"
-"            </saml:Issuer>"
-"            <samlp:NameIDPolicy"
-"              AllowCreate=\"1\""
-"             />"
-"        </samlp:AuthnRequest>"
-"    </S:Body>"
-"</S:Envelope>";
-#endif
-
 static void random_hex(char* s, size_t len) {
     static const char hexdigit[] = "0123456789abcdef";
     size_t i;
@@ -209,31 +159,6 @@ static void random_hex(char* s, size_t len) {
     s[len - 1] = 0;
 }
 
-static char *
-getSAMLRequest()
-{
-    static int init_rand = 0;
-    char utc_time[512], id[36];
-    time_t rawtime;
-    struct tm* timeinfo;
-
-    time(&rawtime);
-    timeinfo = gmtime(&rawtime);
-    strftime(utc_time, sizeof(utc_time), "%Y-%m-%dT%TZ", timeinfo);
-
-    if ( ! init_rand )
-        srandom(rawtime);
-
-    id[0] = '_';
-    random_hex(id + 1, sizeof(id) - 1);
-
-    int len = strlen(saml_req_part1) + strlen(saml_req_part2) + strlen(saml_req_part3) + strlen(utc_time) + strlen(id)+1;
-    char *saml_req = NULL;
-
-    asprintf(&saml_req, "%s%s%s%s%s", saml_req_part1, id, saml_req_part2, utc_time, saml_req_part3);
-
-    return saml_req;
-}
 
 /*
  * Emit a identity EAP request to force the initiator (peer) to identify
@@ -286,9 +211,11 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 #else
     /* major = makeStringBuffer(minor, "SAML_AUTHREQUEST", outputToken); */
     saml_req = getSAMLRequest2();
-    fprintf(stderr, "HELLO HELLO HELLO returned %s\n", saml_req);
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
-    fprintf(stderr, "SENDING SAML_AUTHREQUEST: %s\n", (char *)outputToken->value);
+    fprintf(stderr, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
+           (char *)outputToken->value);
+    free(saml_req);
+    saml_req = NULL;
 #endif
 
     GSSEAP_SM_TRANSITION_NEXT(ctx);
@@ -951,9 +878,11 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
             saml_req = getSAMLRequest2();
             /* TODO VSY: we should really err out on saml_req being NULL */
-	    fprintf(stderr, "HELLO GOODBYE getSAMLReq2 returned %s\n", saml_req);
             major = makeStringBuffer(minor, saml_req?:"", output_token);
-            fprintf(stderr, "SENDING SAML_AUTHREQUEST: %s\n", (char *)output_token->value);
+            fprintf(stderr, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
+                   (char *)output_token->value);
+            free(saml_req);
+            saml_req = NULL;
             if (!GSS_ERROR(major))
                 major = GSS_S_CONTINUE_NEEDED;
         }
@@ -971,12 +900,9 @@ gssEapAcceptSecContext(OM_uint32 *minor,
  *          ctx->expiryTime (0 for indefinite)
  */
         }
-        printf("-------------BEGIN DEBUG----------\n");
         int result = verifySAMLResponse((char*)input_token->value,
                                         (int)input_token->length);
         /* TODO: Return username in third parameter. */
-        printf(input_token->value);
-        printf("-------------END DEBUG----------\n");
 
         /* ASSUME Assertion is Good for now !!! */
         if (result) {

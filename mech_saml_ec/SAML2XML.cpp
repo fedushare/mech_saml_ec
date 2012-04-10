@@ -77,7 +77,7 @@ void generateRandomHex(std::string& buf, unsigned int len) {
     }
 }
 
-extern "C" const char* getSAMLRequest2(void)
+extern "C" char* getSAMLRequest2(void)
 {
     string retstr = "";
 
@@ -212,11 +212,7 @@ extern "C" const char* getSAMLRequest2(void)
                 namepol->AllowCreate(true);
                 request->setNameIDPolicy(namepol);
 
-                // Debugging - Print AuthnRuquest section to stdout
                 XMLObject* requestobj = request.get();
-                // cout << *requestobj << endl;
-                // xercesc::DOMElement* dom = requestobj->getDOM();
-
              
                 // Taken from AbstractHandler.cpp
                 // sendMessage(*encoder,requestobj,relayState.c_str(),dest.get()[=nullptr],
@@ -283,8 +279,6 @@ extern "C" const char* getSAMLRequest2(void)
                     s << *rootElement;
 
                     retstr = s.str();
-                    cout << endl << "Sending the following XML:" 
-                         << endl << retstr << endl;
                     
                     // long ret = genericResponse.sendResponse(s);
                 
@@ -303,16 +297,16 @@ extern "C" const char* getSAMLRequest2(void)
         conf.term();
     }
 
-    cout << endl << "getSAMLRequest2 returning:" 
-	 << endl << retstr.c_str() << endl;
-    char *str = strdup(retstr.c_str()); // deal with memory leak please
-    return str;
+    char* cstr = strdup(retstr.c_str());
+    fprintf(stderr,"--- GETSAMLREQUEST2() RETURNING XML: ---\n%s\n",cstr);
+    return cstr; //  Must free() returned char*
 }
 
 extern "C" int verifySAMLResponse(const char* saml, int len) 
 {
     int retbool = 1;
 
+    fprintf(stderr,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",saml);
 
     return retbool;
 }
