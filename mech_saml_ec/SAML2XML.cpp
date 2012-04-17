@@ -2,18 +2,24 @@
 #include <shibsp/Application.h>
 #include <shibsp/SPConfig.h>
 #include <shibsp/ServiceProvider.h>
+#include <shibsp/attribute/Attribute.h>
+#include <shibsp/attribute/resolver/ResolutionContext.h>
 #include <shibsp/handler/Handler.h>
 #include <saml/SAMLConfig.h>
+#include <saml/saml1/core/Assertions.h>
 #include <saml/saml1/core/Protocols.h>
+#include <saml/saml2/core/Assertions.h>
 #include <saml/saml2/core/Protocols.h>
 #include <saml/saml2/metadata/Metadata.h>
 #include <saml/saml2/metadata/MetadataProvider.h>
 #include <saml/util/SAMLConstants.h>
 #include <xercesc/dom/DOM.hpp>
+#include <xercesc/util/XMLUniDefs.hpp>
 #include <xmltooling/exceptions.h>
 #include <xmltooling/soap/SOAP.h>
 #include <xmltooling/XMLToolingConfig.h>
 #include <xmltooling/impl/AnyElement.h>
+#include <xmltooling/util/ParserPool.h>
 #include <xmltooling/util/XMLHelper.h>
 #include <xmltooling/util/XMLConstants.h>
 #include <iostream>
@@ -307,6 +313,50 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
     int retbool = 1;
 
     fprintf(stderr,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",saml);
+
+    // Initialization code taken from resolvertest.cpp::main()
+    SPConfig& conf = SPConfig::getConfig();
+    conf.setFeatures(
+        SPConfig::Metadata |
+        SPConfig::Trust |
+        SPConfig::AttributeResolution |
+        SPConfig::Credentials |
+        SPConfig::OutOfProcess |
+        SPConfig::Caching |
+        SPConfig::Handlers
+    );
+    if (conf.init()) {
+        if (conf.instantiate()) {
+            ServiceProvider* sp = conf.getServiceProvider();
+            sp->lock();
+            const Application* app = sp->getApplication("default");
+            if (app) {
+                // Taken from util/resolvertest.cpp
+                try {
+                    ResolutionContext* ctx;
+                    string samlstr(saml);
+                    istringstream samlstream(samlstr);
+                    DOMDocument* doc = XMLToolingConfig::getConfig().getParser().parse(samlstream);
+                    XercesJanitor<DOMDocument> docjan(doc);
+                    auto_ptr<XMLObject> token(XMLObjectBuilder::buildOneFromElement(doc->getDocumentElement(), true));
+                    docjan.release();
+
+                    DOMElement *elem = doc->getDocumentElement();
+                    stringstream s;
+                    s << *elem;
+                    cerr << "-----" << endl << "s = " << s << endl << "-----" << endl;
+
+
+
+                } catch (exception & ex) {
+                }
+
+            }
+            sp->unlock();
+
+        } 
+        conf.term();
+    }
 
     return retbool;
 }
