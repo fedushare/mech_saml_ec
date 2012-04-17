@@ -944,7 +944,10 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         }
     }
 
+#ifdef MECH_EAP
+    /* TODO VSY: Do we need to care about maintaining ctx->state ? */
     GSSEAP_ASSERT(CTX_IS_ESTABLISHED(ctx) || major == GSS_S_CONTINUE_NEEDED);
+#endif
 
 cleanup:
     return major;

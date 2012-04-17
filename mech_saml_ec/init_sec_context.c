@@ -587,8 +587,8 @@ fprintf(stderr, "DOING HTTP POST\n");
        /* TODO VSY: Use configured IdP */
        curl_easy_setopt(curl, CURLOPT_URL, "https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP");
 
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
         curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
         sprintf(userpw, "%s:%s", user, password);
@@ -618,7 +618,6 @@ processSAMLRequest(gss_cred_id_t cred, gss_buffer_t request)
     xmlNode *header_fromsp;
 
 fprintf(stderr, "USER IS (%s)\n", user);
-fprintf(stderr, "PASSWORD IS (%s)\n", password);
 
     doc_fromsp = xmlReadMemory(request->value, request->length, "FROMSP", NULL, 0);
     if (doc_fromsp != NULL)
