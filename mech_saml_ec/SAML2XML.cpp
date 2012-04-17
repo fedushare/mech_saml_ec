@@ -27,6 +27,7 @@
 #include <xmltooling/util/ParserPool.h>
 #include <xmltooling/util/XMLHelper.h>
 #include <xmltooling/util/XMLConstants.h>
+#include <xmltooling/validation/ValidatorSuite.h>
 #include <iostream>
 #include <sstream>
 #include <sys/types.h>
@@ -381,21 +382,84 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
             sp->lock();
             const Application* app = sp->getApplication("default");
             if (app) {
-                // Taken from util/resolvertest.cpp
+                // Taken from util/resolvertest.cpp and SAML2ECPDecoder::decode()
                 try {
                     ResolutionContext* ctx;
                     string samlstr(saml);
                     istringstream samlstream(samlstr);
+                   
+                    // Taken from SAML2ECPDecoder::decode()
                     DOMDocument* doc = XMLToolingConfig::getConfig().getParser().parse(samlstream);
                     XercesJanitor<DOMDocument> docjan(doc);
                     auto_ptr<XMLObject> token(XMLObjectBuilder::buildOneFromElement(doc->getDocumentElement(), true));
                     docjan.release();
 
+                    Envelope* env = dynamic_cast<Envelope*>(token.get());
+                    if (env) {
+                        SchemaValidators.validate(env);
+
+                        Body* body = env->getBody();
+                        if (body && body->hasChildren()) {
+                            Response* response = dynamic_cast<Response*>(body->getUnknownXMLObjects().front());
+                            if (response) {
+                                // Run through the policy at two layers.
+                                // TODO: Need to dig into details of extractMessageDetails and
+                                // see how it compares to resolvertest.cpp::main()
+                                /*
+                                extractMessageDetails(*env, genericRequest, samlconstants::SAML20P_NS, policy);
+                                policy.evaluate(*env, &genericRequest);
+                                policy.reset(true);
+                                extractMessageDetails(*response, genericRequest, samlconstants::SAML20P_NS, policy);
+                                policy.evaluate(*response, &genericRequest);
+                                */
+
+                                // Check destination URL.
+                                // TODO: DO WE NEED TO DO THIS???
+                                /*
+                                auto_ptr_char dest(response->getDestination());
+                                const char* dest2 = httpRequest->getRequestURL();
+                                const char* delim = strchr(dest2, '?');
+                                if (response->getSignature() && (!dest.get() || !*(dest.get()))) {
+                                    log.error("signed SAML message missing Destination attribute");
+                                    throw BindingException("Signed SAML message missing Destination attribute identifying intended destination.");
+                                }
+                                else if (dest.get() && *dest.get() && ((delim && strncmp(dest.get(), dest2, delim - dest2)) || (!delim && strcmp(dest.get(),dest2)))) {
+                                    log.error("PAOS response targeted at (%s), but delivered to (%s)", dest.get(), dest2);
+                                    throw BindingException("SAML message delivered with PAOS to incorrect server URL.");
+                                }
+                                */
+
+                                // Check for RelayState header.
+                                // TODO: Do we need to do something "useful" with the RelayState?
+                                string relayState;
+                                if (env->getHeader()) {
+                                    static const XMLCh RelayState[] = UNICODE_LITERAL_10(R,e,l,a,y,S,t,a,t,e);
+                                    const vector<XMLObject*>& blocks = const_cast<const Header*>(env->getHeader())->getUnknownXMLObjects();
+                                    vector<XMLObject*>::const_iterator h =
+                                        find_if(blocks.begin(), blocks.end(), hasQName(xmltooling::QName(samlconstants::SAML20ECP_NS, RelayState)));
+                                    const ElementProxy* ep = dynamic_cast<const ElementProxy*>(h != blocks.end() ? *h : nullptr);
+                                    if (ep) {
+                                        auto_ptr_char rs(ep->getTextContent());
+                                        if (rs.get())
+                                            relayState = rs.get();
+                                    }
+                                }
+                                
+                                token.release();
+                                body->detach(); // frees Envelope
+                                response->detach();   // frees Body
+                            }
+                        }
+                    } else {
+                        cerr << "-----" << endl << "Decoded message was not a SOAP 1.1 Envelope" << endl << "-----" << endl;
+                    }
+
+                    /*
                     DOMElement *elem = doc->getDocumentElement();
                     stringstream s;
                     s << *elem;
                     cerr << "-----" << endl << "s = " << s << endl << "-----" << endl;
-
+                    */
 
 
                 } catch (exception & ex) {
