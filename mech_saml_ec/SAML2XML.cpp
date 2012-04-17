@@ -11,7 +11,9 @@
 #include <saml/saml2/core/Assertions.h>
 #include <saml/saml2/core/Protocols.h>
 #include <saml/saml2/metadata/Metadata.h>
+#include <saml/saml2/metadata/MetadataCredentialCriteria.h>
 #include <saml/saml2/metadata/MetadataProvider.h>
+#include <saml/signature/ContentReference.h>
 #include <saml/util/SAMLConstants.h>
 #include <xercesc/dom/DOM.hpp>
 #include <xercesc/util/XMLUniDefs.hpp>
@@ -19,6 +21,9 @@
 #include <xmltooling/soap/SOAP.h>
 #include <xmltooling/XMLToolingConfig.h>
 #include <xmltooling/impl/AnyElement.h>
+#include <xmltooling/security/Credential.h>
+#include <xmltooling/security/CredentialResolver.h>
+#include <xmltooling/signature/Signature.h>
 #include <xmltooling/util/ParserPool.h>
 #include <xmltooling/util/XMLHelper.h>
 #include <xmltooling/util/XMLConstants.h>
@@ -37,6 +42,7 @@ using namespace shibsp;
 using namespace soap11;
 using namespace xercesc;
 using namespace xmlconstants;
+using namespace xmlsignature;
 using namespace xmltooling;
 using namespace std;
 
@@ -226,6 +232,31 @@ extern "C" char* getSAMLRequest2(void)
                 const EntityDescriptor* entity2 = nullptr;
                 const PropertySet* relyingParty = app->getRelyingParty(entity2);
                 pair<bool,const char*> flag = relyingParty->getString("signing");
+                const Credential* cred = nullptr;
+                pair<bool,const char*> keyName;
+                pair<bool,const XMLCh*> sigalg;
+                pair<bool,const XMLCh*> digalg;
+                if ((flag.first) && (!strcmp(flag.second,"true"))) {
+                    CredentialResolver* credResolver = app->getCredentialResolver();
+                    if (credResolver) {
+                        Locker credLocker(credResolver);
+                        keyName = relyingParty->getString("keyName");
+                        sigalg = relyingParty->getXMLString("signingAlg");
+                        CredentialCriteria cc;
+                        cc.setUsage(Credential::SIGNING_CREDENTIAL);
+                        if (keyName.first) {
+                            cc.getKeyNames().insert(keyName.second);
+                        }
+                        if (sigalg.first) {
+                            cc.setXMLAlgorithm(sigalg.second);
+                        }
+                        cred = credResolver->resolve(&cc);
+                        if (cred) {
+                            // Signed request.
+                            digalg = relyingParty->getXMLString("digestAlg");
+                        }
+                    }
+                }
                 // Call into opensaml's SAML2ECPEncoder.cpp
                 // return encoder.encode(httpResponse,requestobj,dest.get()[=nullptr],
                 //                       entity2[=nullptr],relayState.c_str(),&app)
@@ -279,7 +310,26 @@ extern "C" char* getSAMLRequest2(void)
 
                 try {
                     DOMElement* rootElement = nullptr;
-                    rootElement = env->marshall();
+                    if (cred) {
+                        // Build a Signature.
+                        Signature* sig = SignatureBuilder::buildSignature();
+                        request->setSignature(sig);    
+                        if (sigalg.first && sigalg.second)
+                            sig->setSignatureAlgorithm(sigalg.second);
+                        if (digalg.first && digalg.second) {
+                            opensaml::ContentReference* cr = dynamic_cast<opensaml::ContentReference*>(sig->getContentReference());
+                            if (cr) {
+                                cr->setDigestAlgorithm(digalg.second);
+                            }
+                        }
+                
+                        // Sign message while marshalling.
+                        vector<Signature*> sigs(1,sig);
+                        rootElement = env->marshall((DOMDocument*)nullptr,&sigs,cred);
+
+                    } else {
+                        rootElement = env->marshall();
+                    }
 
                     stringstream s;
                     s << *rootElement;
