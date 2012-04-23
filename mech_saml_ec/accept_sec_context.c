@@ -992,7 +992,6 @@ gss_accept_sec_context(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&ctx->mutex);
 
-#if 1 /* def MECH_EAP */
     major = gssEapAcceptSecContext(minor,
                                    ctx,
                                    cred,
@@ -1004,37 +1003,6 @@ gss_accept_sec_context(OM_uint32 *minor,
                                    ret_flags,
                                    time_rec,
                                    delegated_cred_handle);
-#else
-/* VSY: See description of gss_accept_sec_context in section 5.1 in RFC 2744
- *
- *      if (input_token is "1.1.3.6.1.4.1.11591.4.6n,,")
- *         generate an AuthRequest in output_token
- *         return GSS_S_CONTINUE_NEEDED
- *      else if (input_token is a valid AuthResponse)
- *         return GSS_S_COMPLETE
- *      else
- *         return GSS_S_DEFECTIVE_TOKEN
- *
-*/
-        if (!strcmp((char*)input_token->value, "1.1.3.6.1.4.1.11591.4.6n,,")) {
-            output_token->value = strdup("SAML_AUTHREQUEST");
-            output_token->length = strlen("SAML_AUTHREQUEST")+1;
-            major=GSS_S_CONTINUE_NEEDED;
-        } else if (!strcmp((char*)input_token->value, "SAML_ASSERTION_TO_SP")){
-            /* TODO check SAML assertion */
-            major=GSS_S_COMPLETE;
-        if (src_name != NULL) {
-           gss_buffer_desc name_buf;
-           name_buf.value = "imaclient";
-           name_buf.length = strlen(name_buf.value) + 1;
-
-            major = gssEapImportName(&tmpMinor, &name_buf, GSS_C_NT_USER_NAME,
-                              GSS_C_NO_OID, src_name);
-        }
-        } else {
-            major = GSS_S_DEFECTIVE_TOKEN;
-        }
-#endif
 
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 

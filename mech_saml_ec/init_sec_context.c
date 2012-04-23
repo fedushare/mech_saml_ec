@@ -40,6 +40,8 @@
 #include <libxml/xmlreader.h>
 #include <curl/curl.h>
 
+#define SAML_EC_IDP	"SAML_EC_IDP"
+
 
 #ifdef MECH_EAP
 
@@ -570,7 +572,7 @@ write_data(void *buffer, size_t size, size_t nmemb, void *userp)
 }
 
 void
-sendToIdP(xmlDocPtr doc, char *user, char *password)
+sendToIdP(xmlDocPtr doc, char *idp, char *user, char *password)
 {
     CURL *curl;
     CURLcode res;
@@ -579,13 +581,14 @@ sendToIdP(xmlDocPtr doc, char *user, char *password)
     char userpw[514]; /* TODO VSY: fix this */
 
     xmlDocDumpFormatMemory(doc, &mem, &size, 0);
-    fprintf(stderr, "FORMATTED DOC IS (%p)(%d)\n", mem, size);
 
     curl = curl_easy_init();
     if (curl && mem && size) {
-fprintf(stderr, "DOING HTTP POST\n");
+       
+    fprintf(stderr, "DOING HTTP POST to IdP (%s) using Basic Auth user (%s)\n",
+                    idp, user);
        /* TODO VSY: Use configured IdP */
-       curl_easy_setopt(curl, CURLOPT_URL, "https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP");
+       curl_easy_setopt(curl, CURLOPT_URL, idp);
 
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
@@ -611,13 +614,29 @@ fprintf(stderr, "DOING HTTP POST\n");
 char *
 processSAMLRequest(gss_cred_id_t cred, gss_buffer_t request)
 {
+    char *idp = getenv(SAML_EC_IDP);
     char *user = cred->name->username.value;
     char *password = cred->password.value;
     xmlDocPtr doc_fromsp;
     xmlDocPtr doc_fromidp;
     xmlNode *header_fromsp;
 
+fprintf(stderr, "IdP IS (%s)\n", idp?:"");
 fprintf(stderr, "USER IS (%s)\n", user);
+
+    if (idp == NULL) {
+        fprintf(stderr, "ERROR: NO IDP specified; please specify an IdP"
+                "using the environment variable (%s)\n", SAML_EC_IDP);
+        return NULL;
+    }
+
+    if (user == NULL) {
+        /* TODO: check for a non-NULL password as well? */
+        fprintf(stderr, "ERROR: NO user/password info in credential; "
+                        "please supply a credential acquired with "
+                        "gss_acquire_cred_with_password() or variants\n");
+        return NULL;
+    }
 
     doc_fromsp = xmlReadMemory(request->value, request->length, "FROMSP", NULL, 0);
     if (doc_fromsp != NULL)
@@ -632,7 +651,7 @@ fprintf(stderr, "USER IS (%s)\n", user);
 
     /* Send doc to IdP */
     /* TODO: Error checking here and elsewhere */
-    sendToIdP(doc_fromsp, user, password);
+    sendToIdP(doc_fromsp, idp, user, password);
 
 fprintf(stdout, "RECEIVED FROM IDP (%s)\n", http_data);
 
@@ -975,6 +994,10 @@ gssEapInitSecContext(OM_uint32 *minor,
      */
     if (cred != GSS_C_NO_CREDENTIAL)
         GSSEAP_MUTEX_LOCK(&cred->mutex);
+    else {
+        *minor = GSSEAP_BAD_CRED_OPTION;
+        return GSS_S_NO_CRED;
+    }
 
     if (ctx->cred == GSS_C_NO_CREDENTIAL) {
         major = gssEapResolveInitiatorCred(minor, cred, target_name, &ctx->cred);
@@ -1020,7 +1043,7 @@ gssEapInitSecContext(OM_uint32 *minor,
     } else {
         saml_response = processSAMLRequest(cred, input_token);
         if (saml_response == NULL) {
-            /* Send a fault msg to SP */
+            /* TODO: Send a fault msg to SP */
             major = GSS_S_FAILURE;
             minor = GSSEAP_IDENTITY_SERVICE_UNKNOWN_ERROR;
         } else {
@@ -1103,7 +1126,6 @@ gss_init_sec_context(OM_uint32 *minor,
 
     GSSEAP_MUTEX_LOCK(&ctx->mutex);
 
-#if 1 /* def MECH_EAP */
     major = gssEapInitSecContext(minor,
                                  cred,
                                  ctx,
@@ -1117,7 +1139,7 @@ gss_init_sec_context(OM_uint32 *minor,
                                  output_token,
                                  ret_flags,
                                  time_rec);
-#else
+#ifndef MECH_EAP
 /* VSY: Cred delegation not supported in SAML EC, so GSS_C_DELEG_FLAG should be FALSE
  * VSY: Per kitten, GSS_C_MUTUAL_FLAG is always set but it also says:
  * "The mutual authentication property of this mechanism relies on
@@ -1128,55 +1150,7 @@ gss_init_sec_context(OM_uint32 *minor,
  *  comparison for the mechanism.  For this reason, applications MUST
  *  match the TLS server identity with the target name, as discussed in
  *  [RFC6125]."
- *  
- *  Refer to "5.19. gss_init_sec_context" in RFC 2744 for performing the below.
- *
- *  if (input_token is null or empty)
- *      generate output token as "OID+n,,", specifically
- *      as "1.1.3.6.1.4.1.11591.4.6n,," in output token base64 encoded
- *      return GSS_S_CONTINUE_NEEDED as major status
- *  else
- *      verify the input_token as a SOAP AuthnRequest
- *      retain a copy of Relay State for later use
- *      communicate SOAP body + basic auth header to the configured IdP
- *      wait for reply back from IdP
- *      In the SOAP reply received, replace relay state with one saved earlier
- *      Prepare an output token with the previously altered SOAP reply
- *      return GSS_S_COMPLETE as major status
- *  else
- *      return GSS_S_DEFECTIVE_TOKEN
- *
 */
-        if (input_token == GSS_C_NO_BUFFER || input_token->length == 0) {
-            /* TODO really should check for first invocation of this here */
-            /* TODO handle output_token == GSS_C_NO_BUFFER */
-            output_token->value = strdup("1.1.3.6.1.4.1.11591.4.6n,,");
-            output_token->length = strlen("1.1.3.6.1.4.1.11591.4.6n,,")+1;
-            major = GSS_S_CONTINUE_NEEDED;
-        } else if (!strcmp((char*)input_token->value, "SAML_AUTHREQUEST")) {
-           gss_buffer_desc name_buf;
-            /* TODO obtain SAML assertion fro IdP */
-            output_token->value = strdup("SAML_ASSERTION_TO_SP");
-            output_token->length = strlen("SAML_ASSERTION_TO_SP")+1;
-
-           name_buf.value = "imaclient";
-           name_buf.length = strlen(name_buf.value) + 1;
-            major = gssEapImportName(&tmpMinor, &name_buf, GSS_C_NT_USER_NAME,
-                              GSS_C_NO_OID, &(ctx->initiatorName));
-
-           name_buf.value = "imaserver";
-           name_buf.length = strlen(name_buf.value) + 1;
-            major = gssEapImportName(&tmpMinor, &name_buf, GSS_C_NT_USER_NAME,
-                              GSS_C_NO_OID, &(ctx->acceptorName));
-    major = gssEapCanonicalizeOid(minor,
-                                  GSS_SAMLEC_MECHANISM,
-                                  OID_FLAG_FAMILY_MECH_VALID,
-                                  &ctx->mechanismUsed);
-            major=GSS_S_COMPLETE;
-
-        } else {
-            major = GSS_S_DEFECTIVE_TOKEN;
-        }
 #endif
 
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
