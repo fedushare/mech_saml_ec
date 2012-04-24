@@ -67,13 +67,16 @@ gssEapAllocContext(OM_uint32 *minor,
      * to these services in the output of GSS_Init_sec_context and
      * GSS_Accept_sec_context.
     */
-/* VSY: Review the following; none applicable since we are only concerned
- * with initial auth? */
+#ifndef MECH_EAP
+/* VSY: Review the following; should we really be setting this always? */
+    ctx->gssFlags = GSS_C_MUTUAL_FLAG;      /*  contexts */
+#else
     ctx->gssFlags = GSS_C_TRANS_FLAG    |   /* exporting contexts */
                     GSS_C_INTEG_FLAG    |   /* integrity */
                     GSS_C_CONF_FLAG     |   /* confidentiality */
                     GSS_C_SEQUENCE_FLAG |   /* sequencing */
                     GSS_C_REPLAY_FLAG;      /* replay detection */
+#endif
 
     *pCtx = ctx;
 

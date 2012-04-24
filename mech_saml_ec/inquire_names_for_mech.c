@@ -45,12 +45,14 @@ gss_inquire_names_for_mech(OM_uint32 *minor,
     gss_OID nameTypes[] = {
         GSS_C_NT_USER_NAME,
         GSS_C_NT_HOSTBASED_SERVICE,
+#ifdef MECH_EAP
         GSS_C_NT_EXPORT_NAME,
 #ifdef HAVE_GSS_C_NT_COMPOSITE_EXPORT
         GSS_C_NT_COMPOSITE_EXPORT,
 #endif
         GSS_EAP_NT_EAP_NAME,
         GSS_C_NT_ANONYMOUS,
+#endif
     };
     size_t i;
 
