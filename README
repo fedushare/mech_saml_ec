@@ -49,6 +49,13 @@ gpgcheck=0' \
     xmltooling-schemas \
     libevent
 
+(5) Install other needed RPMs:
+
+# sudo yum -y install \
+	libxml2-devel \
+	libtool \
+	gcc
+
 -------------------------------------
 
 Building The Code:
