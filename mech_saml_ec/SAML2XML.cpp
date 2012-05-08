@@ -98,6 +98,8 @@ void generateRandomHex(std::string& buf, unsigned int len) {
 }
 
 // Taken from resolvertest.cpp
+// This is necessary since resolveAttributes is protected and thus cannot be called 
+// from a local instance of a Handler/AssertionConsumerService object.
 class LocalResolver : public shibsp::AssertionConsumerService
 {
 public:
@@ -548,17 +550,14 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                                         if (!assertions.empty()) {
                                                             saml2::Assertion* a2 = assertions.front();
                                                             const XMLCh* protocol = samlconstants::SAML20P_NS;
-                                                            saml1::NameIdentifier* v1name = nullptr;
                                                             saml2::NameID* v2name = a2->getSubject()?a2->getSubject()->getNameID():nullptr;
-                                                            const XMLCh* authncontext_class = nullptr;
-                                                            const XMLCh* authncontext_decl = nullptr;
-                                                            const shibsp::AssertionConsumerService* resolver = dynamic_cast<const shibsp::AssertionConsumerService*>(ACS);
-                                                            vector<const opensaml::Assertion*> tokens(1,dynamic_cast<opensaml::Assertion*>(assertions.front()));
+                                                            vector<const opensaml::Assertion*> tokens;
+                                                            tokens.assign(assertions.begin(),assertions.end());
 
                                                             LocalResolver lr(nullptr,nullptr);
                                                             ResolutionContext* ctx = lr.resolveAttributes(
-                                                                *app,entity.second,protocol,v1name,v2name,
-                                                                    authncontext_class,authncontext_decl,&tokens);
+                                                                *app,entity.second,protocol,nullptr,v2name,
+                                                                    nullptr,nullptr,&tokens);
                                                             auto_ptr<ResolutionContext> wrapper(ctx);
                                                             for (vector<shibsp::Attribute*>::const_iterator a = ctx->getResolvedAttributes().begin(); 
                                                                  a != ctx->getResolvedAttributes().end(); 
@@ -614,7 +613,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                     }
 
                                     // Check for RelayState header.
-                                    // TODO: Do we need to do something "useful" with the RelayState?
+                                    // Do we need to do something "useful" with the RelayState?
                                     string relayState;
                                     if ((retbool) && (env->getHeader())) {
                                         static const XMLCh RelayState[] = UNICODE_LITERAL_10(R,e,l,a,y,S,t,a,t,e);
@@ -630,10 +629,6 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                     }
                                     cout << "relayState = " << relayState << endl;
 
-                                    if (retbool) {
-                                        
-                                    }
-                                    
                                     token.release();
                                     body->detach(); // frees Envelope
                                     response->detach();   // frees Body
