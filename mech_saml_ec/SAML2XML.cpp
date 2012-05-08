@@ -390,7 +390,13 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
                 TrustEngine* trust = app->getTrustEngine();
                 xmltooling::QName idprole(samlconstants::SAML20MD_NS,IDPSSODescriptor::LOCAL_NAME);
                 SecurityPolicy policy(m,&idprole,trust,false);
-                // Might need to add code from opensaml-2.5/samltest/binding.h setUp(), lines 86-88
+                // Below is a combination of code from 
+                // opensaml-2.5/samltest/binding.h setUp(), lines 86-88
+                // shibboleth-2.5/shibsp/security/SecurityPolicy.cpp, lines 35-37
+                // SAML2POSTTEST.h line 38
+                vector<const SecurityPolicyRule*> rules =
+                    app->getServiceProvider().getPolicyRules(app->getString("policyId").second);
+                policy.getRules().assign(rules.begin(), rules.end());
 
                 // Taken from util/resolvertest.cpp and SAML2ECPDecoder::decode()
                 try {
@@ -505,6 +511,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
                                  *                       true if the message was successfully evaluated by the rule,
                                  *                       throw exception if rejected by rule. UGH!!!
                                  */
+
                                 
 
                                 // Check destination URL.
