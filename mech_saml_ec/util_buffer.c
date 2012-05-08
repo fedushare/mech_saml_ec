@@ -56,6 +56,25 @@ makeStringBuffer(OM_uint32 *minor,
 }
 
 OM_uint32
+addToStringBuffer(OM_uint32 *minor,
+                 const char *ptr,
+                 const size_t len,
+                 gss_buffer_t buffer)
+{
+    buffer->value = GSSEAP_REALLOC(buffer->value, buffer->length + len + 1);
+    if (buffer->value == NULL) {
+        *minor = ENOMEM;
+        return GSS_S_FAILURE;
+    }
+    memcpy(buffer->value+buffer->length, ptr, len);
+    buffer->length += len;
+    ((char *)buffer->value)[buffer->length] = '\0';
+
+    *minor = 0;
+    return GSS_S_COMPLETE;
+}
+
+OM_uint32
 bufferToString(OM_uint32 *minor,
                const gss_buffer_t buffer,
                char **pString)

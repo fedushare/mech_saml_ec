@@ -42,6 +42,17 @@
 
 #define SAML_EC_IDP	"SAML_EC_IDP"
 
+#define SOAP_FAULT_MSG "<?xml version='1.0' encoding='UTF-8'?>" \
+		"<S:Envelope xmlns:S=\"http://schemas.xmlsoap.org/soap/envelope/\">" \
+		"  <S:Header/>" \
+		"  <S:Body>" \
+		"    <S:Fault>" \
+		"      <faultcode>S:Server</faultcode>" \
+		"      <faultstring>General Failure</faultstring>" \
+		"    </S:Fault>" \
+		"  </S:Body>" \
+		"</S:Envelope>"
+
 
 #ifdef MECH_EAP
 
@@ -557,22 +568,21 @@ freeChildren(xmlNode *a_node)
     }
 }
 
-char http_data[15096] = ""; /* TODO VSY Make this dynamic */
-
 size_t
 write_data(void *buffer, size_t size, size_t nmemb, void *userp)
 {
     int numbytes = size * nmemb;
-    int http_len = strlen(http_data);
+    OM_uint32 tmpMinor;
 
-    memcpy(http_data + http_len, buffer, numbytes);
-    http_data[http_len + numbytes] = '\0';
-
-    return numbytes;
+    if (addToStringBuffer(&tmpMinor, buffer, numbytes, userp) == GSS_S_COMPLETE)
+        return numbytes;
+    else
+        return -1;
 }
 
 void
-sendToIdP(xmlDocPtr doc, char *idp, char *user, char *password)
+sendToIdP(xmlDocPtr doc, char *idp, char *user, char *password,
+              gss_buffer_t response)
 {
     CURL *curl;
     CURLcode res;
@@ -587,7 +597,6 @@ sendToIdP(xmlDocPtr doc, char *idp, char *user, char *password)
        
     fprintf(stderr, "DOING HTTP POST to IdP (%s) using Basic Auth user (%s)\n",
                     idp, user);
-       /* TODO VSY: Use configured IdP */
        curl_easy_setopt(curl, CURLOPT_URL, idp);
 
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
@@ -601,6 +610,7 @@ sendToIdP(xmlDocPtr doc, char *idp, char *user, char *password)
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, mem);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, size);
 
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
 
         res = curl_easy_perform(curl);
@@ -611,8 +621,9 @@ sendToIdP(xmlDocPtr doc, char *idp, char *user, char *password)
 }
 
 
-char *
-processSAMLRequest(gss_cred_id_t cred, gss_buffer_t request)
+OM_uint32
+processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
+                 gss_buffer_t request, gss_buffer_t response)
 {
     char *idp = getenv(SAML_EC_IDP);
     char *user = cred->name->username.value;
@@ -620,14 +631,19 @@ processSAMLRequest(gss_cred_id_t cred, gss_buffer_t request)
     xmlDocPtr doc_fromsp;
     xmlDocPtr doc_fromidp;
     xmlNode *header_fromsp;
+    gss_buffer_desc response_from_idp = {0, NULL};
+    OM_uint32 major = GSS_S_COMPLETE;
+    OM_uint32 tmpMinor = 0;
 
 fprintf(stderr, "IdP IS (%s)\n", idp?:"");
 fprintf(stderr, "USER IS (%s)\n", user);
 
+    /* TODO VSY: set minor below */
+
     if (idp == NULL) {
         fprintf(stderr, "ERROR: NO IDP specified; please specify an IdP"
                 "using the environment variable (%s)\n", SAML_EC_IDP);
-        return NULL;
+        return GSS_S_FAILURE;
     }
 
     if (user == NULL) {
@@ -635,14 +651,14 @@ fprintf(stderr, "USER IS (%s)\n", user);
         fprintf(stderr, "ERROR: NO user/password info in credential; "
                         "please supply a credential acquired with "
                         "gss_acquire_cred_with_password() or variants\n");
-        return NULL;
+        return GSS_S_FAILURE;
     }
 
     doc_fromsp = xmlReadMemory(request->value, request->length, "FROMSP", NULL, 0);
     if (doc_fromsp != NULL)
         xmlDocDump(stdout, doc_fromsp);
     else
-        return NULL;
+        return GSS_S_FAILURE;
 
     /* Exclude header */
     header_fromsp = getElement(xmlDocGetRootElement(doc_fromsp), "Header");
@@ -651,22 +667,23 @@ fprintf(stderr, "USER IS (%s)\n", user);
 
     /* Send doc to IdP */
     /* TODO: Error checking here and elsewhere */
-    sendToIdP(doc_fromsp, idp, user, password);
+    sendToIdP(doc_fromsp, idp, user, password, &response_from_idp);
 
-fprintf(stdout, "RECEIVED FROM IDP (%s)\n", http_data);
+fprintf(stdout, "RECEIVED FROM IDP (%s)\n", (char *) response_from_idp.value);
 
     /* Empty header from IdP and populate with RelayState from
  *     header received from SP */
-    doc_fromidp = xmlReadMemory(http_data, strlen(http_data), "FROMIDP", NULL, 0);
-    if (doc_fromsp != NULL) {
-        char *mem = NULL;
-        int size = 0;
+    doc_fromidp = xmlReadMemory(response_from_idp.value,
+                  response_from_idp.length, "FROMIDP", NULL, 0);
+    gss_release_buffer(&tmpMinor, &response_from_idp);
+
+    if (doc_fromidp != NULL) {
         xmlNode *header_fromidp = NULL;
         xmlNode *relay_state = NULL;
         xmlDocDump(stdout, doc_fromidp);
         header_fromidp = getElement(xmlDocGetRootElement(doc_fromidp), "Header");
         if (header_fromidp == NULL)
-            return NULL;
+            return GSS_S_FAILURE;
 
         freeChildren(header_fromidp);
         relay_state = getElement(header_fromsp, "RelayState");
@@ -674,12 +691,15 @@ fprintf(stdout, "RECEIVED FROM IDP (%s)\n", http_data);
         xmlAddChild(header_fromidp, xmlCopyNode(relay_state, 1));
 fprintf(stdout, "SENDING TO SP >>>>>>>>>>>>>>>>>>>\n");
         xmlDocDump(stdout, doc_fromidp);
-        xmlDocDumpMemory(doc_fromidp, &mem, &size);
-        return mem;
+        xmlDocDumpMemory(doc_fromidp, (char *)&response->value, (int *)&response->length);
+        major = GSS_S_COMPLETE;
+    } else {
+fprintf(stderr, "SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
+        major = makeStringBuffer(minor, SOAP_FAULT_MSG, response);
+        major = GSS_S_FAILURE;
     }
 
-fprintf(stderr, "NULL RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
-    return NULL;
+    return major;
 }
 
 static OM_uint32
@@ -769,8 +789,7 @@ cleanup:
          major = makeStringBuffer(minor, "SAML_ASSERTION_TO_SP", outputToken);
     }
 #else
-    saml_response = processSAMLRequest(cred, inputToken);
-    major = makeStringBuffer(minor, saml_response?:"SAML_ASSERTION_IS_NULL", outputToken);
+    major = processSAMLRequest(minor, cred, inputToken, outputToken);
 #endif
 
     major = GSS_S_COMPLETE;
@@ -985,7 +1004,6 @@ gssEapInitSecContext(OM_uint32 *minor,
 {
     OM_uint32 major, tmpMinor;
     int initialContextToken = (ctx->mechanismUsed == GSS_C_NO_OID);
-    char *saml_response = NULL;
 
     /*
      * XXX is acquiring the credential lock here necessary? The password is
@@ -1041,17 +1059,18 @@ gssEapInitSecContext(OM_uint32 *minor,
         if (major == GSS_S_COMPLETE)
             major = GSS_S_CONTINUE_NEEDED;
     } else {
-        saml_response = processSAMLRequest(cred, input_token);
-        if (saml_response == NULL) {
+        major = processSAMLRequest(minor, cred, input_token, output_token);
+        if (major != GSS_S_COMPLETE) {
             /* TODO: Send a fault msg to SP */
-            major = GSS_S_FAILURE;
-            minor = GSSEAP_IDENTITY_SERVICE_UNKNOWN_ERROR;
-        } else {
+        }
+#if 0
+ else {
             major = makeStringBuffer(minor, saml_response, output_token);
             if (!GSS_ERROR(major))
                 /* TODO: Set the below needed info */
                 major = GSS_S_COMPLETE;
         }
+#endif
     }
 #endif
     if (GSS_ERROR(major))

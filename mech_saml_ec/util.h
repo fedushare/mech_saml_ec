@@ -95,6 +95,12 @@ makeStringBuffer(OM_uint32 *minor,
                  const char *string,
                  gss_buffer_t buffer);
 
+OM_uint32
+addToStringBuffer(OM_uint32 *minor,
+                 const char *ptr,
+                 const size_t len,
+                 gss_buffer_t buffer);
+
 #define makeStringBufferOrCleanup(src, dst)             \
     do {                                                \
         major = makeStringBuffer((minor), (src), (dst));\
