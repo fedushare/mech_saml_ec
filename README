@@ -47,14 +47,53 @@ gpgcheck=0' \
     libxmltooling5 \
     libxmltooling-devel \
     xmltooling-schemas \
-    libevent
+    libevent \
+    libxml2-devel \
+    libtool \
+    gcc
 
-(5) Install other needed RPMs:
+(5) If you are running RHEL6 (may also apply to CentOS6), you may encounter a
+warning about libcurl which causes the library to segfault. This is due to
+Red Hat using Netscape Security Services stack (NSS) instead of OpenSSL for
+the curl libraries. See the following for more information:
 
-# sudo yum -y install \
-	libxml2-devel \
-	libtool \
-	gcc
+https://wiki.shibboleth.net/confluence/display/SHIB2/NativeSPLinuxRH6
+
+-------------------------------------
+
+Configuration:
+
+The library depends on correct configuration of the Shibboleth Service
+Provider (SP) software. In particular, you need to choose an entityID for
+your SP, create metadata for the SP (which is needed by any Identity Provider
+(IdP) you use), and configure a few files in /etc/shibboleth/.  In
+particular, you need to modify the following files.
+
+(1) /etc/shibboleth/shibboleth2.xml 
+This is the mail Shibboleth SP configuration file. You should be able to use
+the provided shibboleth2.xml.dist file as a starting point. You must set the
+following sections:
+  (a) <ApplicationDefaults entityID="https://your.org/shibboleth"
+                     REMOTE_USER="persistent-id targeted-id eppn"
+                     signing="true">
+      The entityID is set to your chosen entityID and must match the entityID
+      in the metadata for the SP. "signing" must be set to true so that SAML
+      messages passed between the server and client are signed.
+  (b) <MetadataProvider ...>
+      You must have at least one MetadataProvider section so the library
+      can verify the IdP used to authenticate the user. 
+
+(2) /etc/shibboleth/attribute-map.xml
+In order to get a local user name for the authenticated user, you must map
+one attribute released by the IdP to "local-login-user". This actually
+requires two steps:
+  (a) The IdP must be configured to release an attribute to your SP's
+      entityID.  It's not critical WHICH attribute is released, as long as
+      the IdP and SP agree. For this discussion, let's say the IdP has
+      released "givenName" (urn:oid:2.5.4.42).
+  (b) On the SP side, map this attribute to "local-login-user" by adding the
+      following to attribute-map.xml:
+      <Attribute name="urn:oid:2.5.4.42" id="local-login-user"/>
 
 -------------------------------------
 
