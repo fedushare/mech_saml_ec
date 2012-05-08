@@ -361,7 +361,7 @@ extern "C" char* getSAMLRequest2(void)
     return cstr; //  Must free() returned char*
 }
 
-extern "C" int verifySAMLResponse(const char* saml, int len) 
+extern "C" int verifySAMLResponse(const char* saml, int len, char* username) 
 {
     int retbool = 1;
 
@@ -390,7 +390,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
                 TrustEngine* trust = app->getTrustEngine();
                 xmltooling::QName idprole(samlconstants::SAML20MD_NS,IDPSSODescriptor::LOCAL_NAME);
                 SecurityPolicy policy(m,&idprole,trust,false);
-                // Below is a combination of code from 
+                // Create policy rul list, a combination of code from 
                 // opensaml-2.5/samltest/binding.h setUp(), lines 86-88
                 // shibboleth-2.5/shibsp/security/SecurityPolicy.cpp, lines 35-37
                 // SAML2POSTTEST.h line 38
@@ -564,6 +564,9 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
         } 
         conf.term();
     }
+
+    string uname = "dummyuser";
+    strcpy(username,uname.c_str());
 
     return retbool;
 }

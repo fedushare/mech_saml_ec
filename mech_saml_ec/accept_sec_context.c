@@ -38,7 +38,7 @@
 #include "gssapiP_eap.h"
 
 char* getSAMLRequest2(void);
-int verifySAMLResponse(const char*,int);
+int verifySAMLResponse(const char*,int,char*);
 
 #if MECH_EAP
 /*
@@ -900,9 +900,15 @@ gssEapAcceptSecContext(OM_uint32 *minor,
  *          ctx->expiryTime (0 for indefinite)
  */
         }
+
+        // Allocate space for username string. MUST FREE LATER!!!
+        char* username = calloc(128,sizeof(char));
         int result = verifySAMLResponse((char*)input_token->value,
-                                        (int)input_token->length);
-        /* TODO: Return username in third parameter. */
+                                        (int)input_token->length,
+                                        username);
+        fprintf(stderr,"Username = '%s'\n",username);
+        // May need to move this "free(username)" to later in the code
+        free(username);
 
         /* ASSUME Assertion is Good for now !!! */
         if (result) {
