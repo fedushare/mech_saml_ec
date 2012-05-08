@@ -6,6 +6,8 @@
 #include <shibsp/attribute/resolver/ResolutionContext.h>
 #include <shibsp/handler/Handler.h>
 #include <saml/SAMLConfig.h>
+#include <saml/binding/SecurityPolicy.h>
+#include <saml/binding/SecurityPolicyRule.h>
 #include <saml/saml1/core/Assertions.h>
 #include <saml/saml1/core/Protocols.h>
 #include <saml/saml2/core/Assertions.h>
@@ -382,6 +384,14 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
             sp->lock();
             const Application* app = sp->getApplication("default");
             if (app) {
+
+                MetadataProvider* m = app->getMetadataProvider();
+                Locker mlocker(m);
+                TrustEngine* trust = app->getTrustEngine();
+                xmltooling::QName idprole(samlconstants::SAML20MD_NS,IDPSSODescriptor::LOCAL_NAME);
+                SecurityPolicy policy(m,&idprole,trust,false);
+                // Might need to add code from opensaml-2.5/samltest/binding.h setUp(), lines 86-88
+
                 // Taken from util/resolvertest.cpp and SAML2ECPDecoder::decode()
                 try {
                     ResolutionContext* ctx;
@@ -403,8 +413,6 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
                             Response* response = dynamic_cast<Response*>(body->getUnknownXMLObjects().front());
                             if (response) {
                                 // Run through the policy at two layers.
-                                // TODO: Need to dig into details of extractMessageDetails and
-                                // see how it compares to resolvertest.cpp::main()
                                 /*
                                 extractMessageDetails(*env, genericRequest, samlconstants::SAML20P_NS, policy);
                                 policy.evaluate(*env, &genericRequest);
@@ -412,22 +420,99 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
                                 extractMessageDetails(*response, genericRequest, samlconstants::SAML20P_NS, policy);
                                 policy.evaluate(*response, &genericRequest);
                                 */
+                                // Don't bother with extractMessageDetails(*env,...) since env is not a SAML20P_NS
+                                // Instead, call SAML2MessageDecoder::extractMessageDetails(*response,...)
+                                const xmltooling::QName& q = response->getElementQName();
+                                if (XMLString::equals(q.getNamespaceURI(), samlconstants::SAML20P_NS)) {
+                                    try {
+                                        const saml2::RootObject& samlRoot = dynamic_cast<const saml2::RootObject&>(*response);
+                                        policy.setMessageID(samlRoot.getID());
+                                        policy.setIssueInstant(samlRoot.getIssueInstantEpoch());
+
+                                        const Issuer* issuer = samlRoot.getIssuer();
+                                        if (issuer) {
+                                            policy.setIssuer(issuer);
+                                        } else if (XMLString::equals(q.getLocalPart(), Response::LOCAL_NAME)) {
+                                            // No issuer in the message, so we have to try the Response approach.
+                                            const vector<saml2::Assertion*>& assertions = dynamic_cast<const Response&>(samlRoot).getAssertions();
+                                            if (!assertions.empty()) {
+                                                issuer = assertions.front()->getIssuer();
+                                                if (issuer) {
+                                                    policy.setIssuer(issuer);
+                                                }
+                                            }
+                                        }
+                                        if (!issuer) {
+                                            cerr << "Issuer identity not extracted!" << endl;
+                                            return 0;
+                                        }
+
+                                        auto_ptr_char iname(issuer->getName());
+                                        cout << "issuer = " << iname.get() << endl;
+
+                                        if (policy.getIssuerMetadata()) {
+                                            cerr << "metadata for issuer already set, leaving in place." << endl;
+                                            // return;
+                                        }
+
+                                        if (policy.getMetadataProvider() && policy.getRole()) {
+                                            if (issuer->getFormat() && !XMLString::equals(issuer->getFormat(), 
+                                                                                          NameIDType::ENTITY)) {
+                                                cerr << "non-system entity issuer, skipping metadata lookup!" << endl;
+                                                // return;
+                                            }
+
+                                            cerr << "searching metadata for message issuer... ";
+                                            MetadataProvider::Criteria& mc = policy.getMetadataProviderCriteria();
+                                            mc.entityID_unicode = issuer->getName();
+                                            mc.role = policy.getRole();
+                                            mc.protocol = samlconstants::SAML20P_NS;
+                                            pair<const EntityDescriptor*,const RoleDescriptor*> entity = 
+                                                policy.getMetadataProvider()->getEntityDescriptor(mc);
+                                            if (!entity.first) {
+                                                auto_ptr_char temp(issuer->getName());
+                                                cerr << "no metadata found, can't establish identity of issuer (" <<
+                                                        temp.get() << ")" << endl;
+                                                // return;
+                                            }
+                                            else if (!entity.second) {
+                                                cerr << "unable to find compatible role (" << 
+                                                policy.getRole()->toString().c_str() << ") in metadata" << endl;
+                                                // return;
+                                            } else {
+                                                policy.setIssuerMetadata(entity.second);
+                                                cerr << "Done!" << endl;
+                                            }
+                                        }
+
+
+                                    } catch (bad_cast&) {
+                                        cerr << "caught a bad_cast while extracting message details" << endl;
+                                    }
+                                }
+                                // End SAML2MessageDecoder::extractMessageDetails(*response,...)
+                              
+                                // Next, call policy.evaluate(*response, &genericRequest);
+                                /* void SecurityPolicy::evaluate(const XMLObject&,const GenericRequest*)
+                                 * {
+                                 *     for (vector<const SecurityPolicyRule*>::const_iterator i=m_rules.begin(); 
+                                 *          i!=m_rules.end(); 
+                                 *          ++i)
+                                 *         (*i)->evaluate(message,request,*this);
+                                 * }
+                                 * Here (*i)->evaluate() calls (e.g.) XMLSigningRule:evaluate(...)
+                                 * Each of which returns false if that evaluate() call does not apply to the message,
+                                 *                       true if the message was successfully evaluated by the rule,
+                                 *                       throw exception if rejected by rule. UGH!!!
+                                 */
+                                
 
                                 // Check destination URL.
-                                // TODO: DO WE NEED TO DO THIS???
-                                /*
                                 auto_ptr_char dest(response->getDestination());
-                                const char* dest2 = httpRequest->getRequestURL();
-                                const char* delim = strchr(dest2, '?');
                                 if (response->getSignature() && (!dest.get() || !*(dest.get()))) {
-                                    log.error("signed SAML message missing Destination attribute");
-                                    throw BindingException("Signed SAML message missing Destination attribute identifying intended destination.");
+                                    cerr << "Signed SAML message missing Destination attribute!" << endl;
+                                    return 0;
                                 }
-                                else if (dest.get() && *dest.get() && ((delim && strncmp(dest.get(), dest2, delim - dest2)) || (!delim && strcmp(dest.get(),dest2)))) {
-                                    log.error("PAOS response targeted at (%s), but delivered to (%s)", dest.get(), dest2);
-                                    throw BindingException("SAML message delivered with PAOS to incorrect server URL.");
-                                }
-                                */
 
                                 // Check for RelayState header.
                                 // TODO: Do we need to do something "useful" with the RelayState?
@@ -444,6 +529,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len)
                                             relayState = rs.get();
                                     }
                                 }
+                                cout << "relayState = " << relayState << endl;
                                 
                                 token.release();
                                 body->detach(); // frees Envelope
