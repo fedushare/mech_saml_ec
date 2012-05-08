@@ -5,6 +5,10 @@
 #include <shibsp/attribute/Attribute.h>
 #include <shibsp/attribute/resolver/ResolutionContext.h>
 #include <shibsp/handler/Handler.h>
+#include <shibsp/handler/AssertionConsumerService.h>
+#include <shibsp/metadata/MetadataProviderCriteria.h>
+#include <shibsp/util/SPConstants.h>
+#include <saml/exceptions.h>
 #include <saml/SAMLConfig.h>
 #include <saml/binding/SecurityPolicy.h>
 #include <saml/binding/SecurityPolicyRule.h>
@@ -36,16 +40,17 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-using namespace opensaml;
 using namespace opensaml::saml2;
 using namespace opensaml::saml2p;
 using namespace opensaml::saml2md;
+using namespace opensaml;
 using namespace samlconstants;
 using namespace shibsp;
 using namespace soap11;
 using namespace xercesc;
 using namespace xmlconstants;
 using namespace xmlsignature;
+using namespace xmltooling::logging;
 using namespace xmltooling;
 using namespace std;
 
@@ -91,6 +96,44 @@ void generateRandomHex(std::string& buf, unsigned int len) {
         buf += (DIGITS[0x0F & b2]);
     }
 }
+
+// Taken from resolvertest.cpp
+class LocalResolver : public shibsp::AssertionConsumerService
+{
+public:
+    LocalResolver(const DOMElement* e, const char* appId)
+        : shibsp::AssertionConsumerService(e, appId, Category::getInstance(SHIBSP_LOGCAT".Utilities.LocalResolver")) {
+    }
+    virtual ~LocalResolver() {}
+    
+    ResolutionContext* resolveAttributes (
+        const Application& application,
+        const RoleDescriptor* issuer,
+        const XMLCh* protocol,
+        const saml1::NameIdentifier* v1nameid,
+        const saml2::NameID* nameid,
+        const XMLCh* authncontext_class,
+        const XMLCh* authncontext_decl,
+        const vector<const opensaml::Assertion*>* tokens
+        ) const {
+        return shibsp::AssertionConsumerService::resolveAttributes(
+            application, issuer, protocol, v1nameid, nameid, authncontext_class, authncontext_decl, tokens
+            );
+    }
+
+private:
+    void implementProtocol(
+        const Application& application,
+        const HTTPRequest& httpRequest,
+        HTTPResponse& httpResponse,
+        SecurityPolicy& policy,
+        const PropertySet* settings,
+        const XMLObject& xmlObject
+        ) const {
+            throw FatalProfileException("Should never be called.");
+    }
+};
+
 
 extern "C" char* getSAMLRequest2(void)
 {
@@ -364,6 +407,7 @@ extern "C" char* getSAMLRequest2(void)
 extern "C" int verifySAMLResponse(const char* saml, int len, char* username) 
 {
     int retbool = 1;
+    string localLoginUser = "";
 
     fprintf(stderr,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",saml);
 
@@ -384,180 +428,234 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
             sp->lock();
             const Application* app = sp->getApplication("default");
             if (app) {
-
-                MetadataProvider* m = app->getMetadataProvider();
-                Locker mlocker(m);
-                TrustEngine* trust = app->getTrustEngine();
-                xmltooling::QName idprole(samlconstants::SAML20MD_NS,IDPSSODescriptor::LOCAL_NAME);
-                SecurityPolicy policy(m,&idprole,trust,false);
-                // Create policy rul list, a combination of code from 
-                // opensaml-2.5/samltest/binding.h setUp(), lines 86-88
-                // shibboleth-2.5/shibsp/security/SecurityPolicy.cpp, lines 35-37
-                // SAML2POSTTEST.h line 38
-                vector<const SecurityPolicyRule*> rules =
-                    app->getServiceProvider().getPolicyRules(app->getString("policyId").second);
-                policy.getRules().assign(rules.begin(), rules.end());
-
-                // Taken from util/resolvertest.cpp and SAML2ECPDecoder::decode()
-                try {
-                    ResolutionContext* ctx;
-                    string samlstr(saml);
-                    istringstream samlstream(samlstr);
-                   
-                    // Taken from SAML2ECPDecoder::decode()
-                    DOMDocument* doc = XMLToolingConfig::getConfig().getParser().parse(samlstream);
-                    XercesJanitor<DOMDocument> docjan(doc);
-                    auto_ptr<XMLObject> token(XMLObjectBuilder::buildOneFromElement(doc->getDocumentElement(), true));
-                    docjan.release();
-
-                    Envelope* env = dynamic_cast<Envelope*>(token.get());
-                    if (env) {
-                        SchemaValidators.validate(env);
-
-                        Body* body = env->getBody();
-                        if (body && body->hasChildren()) {
-                            Response* response = dynamic_cast<Response*>(body->getUnknownXMLObjects().front());
-                            if (response) {
-                                // Run through the policy at two layers.
-                                /*
-                                extractMessageDetails(*env, genericRequest, samlconstants::SAML20P_NS, policy);
-                                policy.evaluate(*env, &genericRequest);
-                                policy.reset(true);
-                                extractMessageDetails(*response, genericRequest, samlconstants::SAML20P_NS, policy);
-                                policy.evaluate(*response, &genericRequest);
-                                */
-                                // Don't bother with extractMessageDetails(*env,...) since env is not a SAML20P_NS
-                                // Instead, call SAML2MessageDecoder::extractMessageDetails(*response,...)
-                                const xmltooling::QName& q = response->getElementQName();
-                                if (XMLString::equals(q.getNamespaceURI(), samlconstants::SAML20P_NS)) {
-                                    try {
-                                        const saml2::RootObject& samlRoot = dynamic_cast<const saml2::RootObject&>(*response);
-                                        policy.setMessageID(samlRoot.getID());
-                                        policy.setIssueInstant(samlRoot.getIssueInstantEpoch());
-
-                                        const Issuer* issuer = samlRoot.getIssuer();
-                                        if (issuer) {
-                                            policy.setIssuer(issuer);
-                                        } else if (XMLString::equals(q.getLocalPart(), Response::LOCAL_NAME)) {
-                                            // No issuer in the message, so we have to try the Response approach.
-                                            const vector<saml2::Assertion*>& assertions = dynamic_cast<const Response&>(samlRoot).getAssertions();
-                                            if (!assertions.empty()) {
-                                                issuer = assertions.front()->getIssuer();
-                                                if (issuer) {
-                                                    policy.setIssuer(issuer);
-                                                }
-                                            }
-                                        }
-                                        if (!issuer) {
-                                            cerr << "Issuer identity not extracted!" << endl;
-                                            return 0;
-                                        }
-
-                                        auto_ptr_char iname(issuer->getName());
-                                        cout << "issuer = " << iname.get() << endl;
-
-                                        if (policy.getIssuerMetadata()) {
-                                            cerr << "metadata for issuer already set, leaving in place." << endl;
-                                            // return;
-                                        }
-
-                                        if (policy.getMetadataProvider() && policy.getRole()) {
-                                            if (issuer->getFormat() && !XMLString::equals(issuer->getFormat(), 
-                                                                                          NameIDType::ENTITY)) {
-                                                cerr << "non-system entity issuer, skipping metadata lookup!" << endl;
-                                                // return;
-                                            }
-
-                                            cerr << "searching metadata for message issuer... ";
-                                            MetadataProvider::Criteria& mc = policy.getMetadataProviderCriteria();
-                                            mc.entityID_unicode = issuer->getName();
-                                            mc.role = policy.getRole();
-                                            mc.protocol = samlconstants::SAML20P_NS;
-                                            pair<const EntityDescriptor*,const RoleDescriptor*> entity = 
-                                                policy.getMetadataProvider()->getEntityDescriptor(mc);
-                                            if (!entity.first) {
-                                                auto_ptr_char temp(issuer->getName());
-                                                cerr << "no metadata found, can't establish identity of issuer (" <<
-                                                        temp.get() << ")" << endl;
-                                                // return;
-                                            }
-                                            else if (!entity.second) {
-                                                cerr << "unable to find compatible role (" << 
-                                                policy.getRole()->toString().c_str() << ") in metadata" << endl;
-                                                // return;
-                                            } else {
-                                                policy.setIssuerMetadata(entity.second);
-                                                cerr << "Done!" << endl;
-                                            }
-                                        }
-
-
-                                    } catch (bad_cast&) {
-                                        cerr << "caught a bad_cast while extracting message details" << endl;
-                                    }
-                                }
-                                // End SAML2MessageDecoder::extractMessageDetails(*response,...)
-                              
-                                // Next, call policy.evaluate(*response, &genericRequest);
-                                /* void SecurityPolicy::evaluate(const XMLObject&,const GenericRequest*)
-                                 * {
-                                 *     for (vector<const SecurityPolicyRule*>::const_iterator i=m_rules.begin(); 
-                                 *          i!=m_rules.end(); 
-                                 *          ++i)
-                                 *         (*i)->evaluate(message,request,*this);
-                                 * }
-                                 * Here (*i)->evaluate() calls (e.g.) XMLSigningRule:evaluate(...)
-                                 * Each of which returns false if that evaluate() call does not apply to the message,
-                                 *                       true if the message was successfully evaluated by the rule,
-                                 *                       throw exception if rejected by rule. UGH!!!
-                                 */
-
-                                
-
-                                // Check destination URL.
-                                auto_ptr_char dest(response->getDestination());
-                                if (response->getSignature() && (!dest.get() || !*(dest.get()))) {
-                                    cerr << "Signed SAML message missing Destination attribute!" << endl;
-                                    return 0;
-                                }
-
-                                // Check for RelayState header.
-                                // TODO: Do we need to do something "useful" with the RelayState?
-                                string relayState;
-                                if (env->getHeader()) {
-                                    static const XMLCh RelayState[] = UNICODE_LITERAL_10(R,e,l,a,y,S,t,a,t,e);
-                                    const vector<XMLObject*>& blocks = const_cast<const Header*>(env->getHeader())->getUnknownXMLObjects();
-                                    vector<XMLObject*>::const_iterator h =
-                                        find_if(blocks.begin(), blocks.end(), hasQName(xmltooling::QName(samlconstants::SAML20ECP_NS, RelayState)));
-                                    const ElementProxy* ep = dynamic_cast<const ElementProxy*>(h != blocks.end() ? *h : nullptr);
-                                    if (ep) {
-                                        auto_ptr_char rs(ep->getTextContent());
-                                        if (rs.get())
-                                            relayState = rs.get();
-                                    }
-                                }
-                                cout << "relayState = " << relayState << endl;
-                                
-                                token.release();
-                                body->detach(); // frees Envelope
-                                response->detach();   // frees Body
-                            }
-                        }
-                    } else {
-                        cerr << "-----" << endl << "Decoded message was not a SOAP 1.1 Envelope" << endl << "-----" << endl;
-                    }
-
-                    /*
-                    DOMElement *elem = doc->getDocumentElement();
-                    stringstream s;
-                    s << *elem;
-                    cerr << "-----" << endl << "s = " << s << endl << "-----" << endl;
-                    */
-
-
-                } catch (exception & ex) {
+                // Get the AssertionConsumerService
+                const Handler* ACS=nullptr;
+                ACS = app->getAssertionConsumerServiceByProtocol(SAML20P_NS,SAML20_BINDING_PAOS);
+                if (!ACS) {
+                    cerr << "Unable to locate PAOS response endpoint." << endl;
+                    retbool = 0;
                 }
 
+                if (retbool) {
+                    MetadataProvider* m = app->getMetadataProvider();
+                    Locker mlocker(m);
+                    TrustEngine* trust = app->getTrustEngine();
+                    xmltooling::QName idprole(samlconstants::SAML20MD_NS,IDPSSODescriptor::LOCAL_NAME);
+                    SecurityPolicy policy(m,&idprole,trust,false);
+                    // Create policy rule list, a combination of code from 
+                    // opensaml-2.5/samltest/binding.h setUp(), lines 86-88
+                    // shibboleth-2.5/shibsp/security/SecurityPolicy.cpp, lines 35-37
+                    // SAML2POSTTEST.h line 38
+                    vector<const SecurityPolicyRule*> rules =
+                        app->getServiceProvider().getPolicyRules(app->getString("policyId").second);
+                    policy.getRules().assign(rules.begin(), rules.end());
+
+                    // Taken from util/resolvertest.cpp and SAML2ECPDecoder::decode()
+                    try {
+                        string samlstr(saml);
+                        istringstream samlstream(samlstr);
+                       
+                        // Taken from SAML2ECPDecoder::decode()
+                        DOMDocument* doc = XMLToolingConfig::getConfig().getParser().parse(samlstream);
+                        XercesJanitor<DOMDocument> docjan(doc);
+                        auto_ptr<XMLObject> token(XMLObjectBuilder::buildOneFromElement(doc->getDocumentElement(), true));
+                        docjan.release();
+
+                        Envelope* env = dynamic_cast<Envelope*>(token.get());
+                        if (env) {
+                            SchemaValidators.validate(env);
+
+                            Body* body = env->getBody();
+                            if (body && body->hasChildren()) {
+                                Response* response = dynamic_cast<Response*>(body->getUnknownXMLObjects().front());
+                                if (response) {
+                                    // Run through the policy at two layers.
+                                    /*
+                                    extractMessageDetails(*env, genericRequest, samlconstants::SAML20P_NS, policy);
+                                    policy.evaluate(*env, &genericRequest);
+                                    policy.reset(true);
+                                    extractMessageDetails(*response, genericRequest, samlconstants::SAML20P_NS, policy);
+                                    policy.evaluate(*response, &genericRequest);
+                                    */
+                                    // Don't bother with extractMessageDetails(*env,...) since env is not a SAML20P_NS
+                                    // Instead, call SAML2MessageDecoder::extractMessageDetails(*response,...)
+                                    const xmltooling::QName& q = response->getElementQName();
+                                    if (XMLString::equals(q.getNamespaceURI(), samlconstants::SAML20P_NS)) {
+                                        try {
+                                            const saml2::RootObject& samlRoot = dynamic_cast<const saml2::RootObject&>(*response);
+                                            const vector<saml2::Assertion*>& assertions = dynamic_cast<const Response&>(samlRoot).getAssertions();
+                                            policy.setMessageID(samlRoot.getID());
+                                            policy.setIssueInstant(samlRoot.getIssueInstantEpoch());
+
+                                            const Issuer* issuer = samlRoot.getIssuer();
+                                            if (issuer) {
+                                                policy.setIssuer(issuer);
+                                            } else if (XMLString::equals(q.getLocalPart(), Response::LOCAL_NAME)) {
+                                                // No issuer in the message, so we have to try the Response approach.
+                                                if (!assertions.empty()) {
+                                                    issuer = assertions.front()->getIssuer();
+                                                    if (issuer) {
+                                                        policy.setIssuer(issuer);
+                                                    }
+                                                }
+                                            }
+                                            if (!issuer) {
+                                                cerr << "Issuer identity not extracted!" << endl;
+                                                retbool = 0;
+                                            }
+
+                                            if (retbool) {
+                                                auto_ptr_char iname(issuer->getName());
+                                                cout << "issuer = " << iname.get() << endl;
+
+                                                if (policy.getIssuerMetadata()) {
+                                                    cerr << "metadata for issuer already set, leaving in place." << endl;
+                                                    // return;
+                                                }
+
+                                                if (policy.getMetadataProvider() && policy.getRole()) {
+                                                    if (issuer->getFormat() && !XMLString::equals(issuer->getFormat(), 
+                                                                                                  NameIDType::ENTITY)) {
+                                                        cerr << "non-system entity issuer, skipping metadata lookup!" << endl;
+                                                        // return;
+                                                    }
+
+                                                    cerr << "searching metadata for message issuer... ";
+                                                    MetadataProvider::Criteria& mc = policy.getMetadataProviderCriteria();
+                                                    mc.entityID_unicode = issuer->getName();
+                                                    mc.role = policy.getRole();
+                                                    mc.protocol = samlconstants::SAML20P_NS;
+                                                    pair<const EntityDescriptor*,const RoleDescriptor*> entity = 
+                                                        policy.getMetadataProvider()->getEntityDescriptor(mc);
+                                                    if (!entity.first) {
+                                                        auto_ptr_char temp(issuer->getName());
+                                                        cerr << "no metadata found, can't establish identity of issuer (" <<
+                                                                temp.get() << ")" << endl;
+                                                        retbool = 0;
+                                                    }
+                                                    else if (!entity.second) {
+                                                        cerr << "unable to find compatible role (" << 
+                                                                policy.getRole()->toString().c_str() << ") in metadata" << endl;
+                                                        retbool = 0;
+                                                    } else {
+                                                        policy.setIssuerMetadata(entity.second);
+                                                        cerr << "Done!" << endl;
+                                                    }
+
+                                                    // Attempt to extract local-login-user attribute
+                                                    // Taken from resolvertest.cpp
+                                                    if (retbool) {
+                                                        if (!assertions.empty()) {
+                                                            saml2::Assertion* a2 = assertions.front();
+                                                            const XMLCh* protocol = samlconstants::SAML20P_NS;
+                                                            saml1::NameIdentifier* v1name = nullptr;
+                                                            saml2::NameID* v2name = a2->getSubject()?a2->getSubject()->getNameID():nullptr;
+                                                            const XMLCh* authncontext_class = nullptr;
+                                                            const XMLCh* authncontext_decl = nullptr;
+                                                            const shibsp::AssertionConsumerService* resolver = dynamic_cast<const shibsp::AssertionConsumerService*>(ACS);
+                                                            vector<const opensaml::Assertion*> tokens(1,dynamic_cast<opensaml::Assertion*>(assertions.front()));
+
+                                                            LocalResolver lr(nullptr,nullptr);
+                                                            ResolutionContext* ctx = lr.resolveAttributes(
+                                                                *app,entity.second,protocol,v1name,v2name,
+                                                                    authncontext_class,authncontext_decl,&tokens);
+                                                            auto_ptr<ResolutionContext> wrapper(ctx);
+                                                            for (vector<shibsp::Attribute*>::const_iterator a = ctx->getResolvedAttributes().begin(); 
+                                                                 a != ctx->getResolvedAttributes().end(); 
+                                                                 ++a) {
+                                                                for (vector<string>::const_iterator s = (*a)->getAliases().begin(); 
+                                                                     s != (*a)->getAliases().end(); 
+                                                                     ++s) {
+                                                                    if (s->compare("local-login-user") == 0) {
+                                                                        for (vector<string>::const_iterator v=(*a)->getSerializedValues().begin();
+                                                                             v != (*a)->getSerializedValues().end(); 
+                                                                             ++v) {
+                                                                            if (v != (*a)->getSerializedValues().begin())
+                                                                                localLoginUser += ";";
+                                                                            localLoginUser += *v;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        } else {
+                                                            retbool = 0;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } catch (bad_cast&) {
+                                            cerr << "caught a bad_cast while extracting message details" << endl;
+                                        }
+                                    }
+                                    // End SAML2MessageDecoder::extractMessageDetails(*response,...)
+                                  
+                                    // Next, call policy.evaluate(*response, &genericRequest);
+                                    /* void SecurityPolicy::evaluate(const XMLObject&,const GenericRequest*)
+                                     * {
+                                     *     for (vector<const SecurityPolicyRule*>::const_iterator i=m_rules.begin(); 
+                                     *          i!=m_rules.end(); 
+                                     *          ++i)
+                                     *         (*i)->evaluate(message,request,*this);
+                                     * }
+                                     * Here (*i)->evaluate() calls (e.g.) XMLSigningRule:evaluate(...)
+                                     * Each of which returns false if that evaluate() call does not apply to the message,
+                                     *                       true if the message was successfully evaluated by the rule,
+                                     *                       throw exception if rejected by rule. UGH!!!
+                                     */
+
+                                    if (retbool) {
+                                        // Check destination URL.
+                                        auto_ptr_char dest(response->getDestination());
+                                        if (response->getSignature() && (!dest.get() || !*(dest.get()))) {
+                                            cerr << "Signed SAML message missing Destination attribute!" << endl;
+                                            // return 0;
+                                            retbool = 0;
+                                        }
+                                    }
+
+                                    // Check for RelayState header.
+                                    // TODO: Do we need to do something "useful" with the RelayState?
+                                    string relayState;
+                                    if ((retbool) && (env->getHeader())) {
+                                        static const XMLCh RelayState[] = UNICODE_LITERAL_10(R,e,l,a,y,S,t,a,t,e);
+                                        const vector<XMLObject*>& blocks = const_cast<const Header*>(env->getHeader())->getUnknownXMLObjects();
+                                        vector<XMLObject*>::const_iterator h =
+                                            find_if(blocks.begin(), blocks.end(), hasQName(xmltooling::QName(samlconstants::SAML20ECP_NS, RelayState)));
+                                        const ElementProxy* ep = dynamic_cast<const ElementProxy*>(h != blocks.end() ? *h : nullptr);
+                                        if (ep) {
+                                            auto_ptr_char rs(ep->getTextContent());
+                                            if (rs.get())
+                                                relayState = rs.get();
+                                        }
+                                    }
+                                    cout << "relayState = " << relayState << endl;
+
+                                    if (retbool) {
+                                        
+                                    }
+                                    
+                                    token.release();
+                                    body->detach(); // frees Envelope
+                                    response->detach();   // frees Body
+                                }
+                            }
+                        } else {
+                            cerr << "-----" << endl << "Decoded message was not a SOAP 1.1 Envelope" << endl << "-----" << endl;
+                        }
+
+                        /*
+                        DOMElement *elem = doc->getDocumentElement();
+                        stringstream s;
+                        s << *elem;
+                        cerr << "-----" << endl << "s = " << s << endl << "-----" << endl;
+                        */
+
+
+                    } catch (exception & ex) {
+                        retbool = 0;
+                    }
+
+                }
             }
             sp->unlock();
 
@@ -565,8 +663,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
         conf.term();
     }
 
-    string uname = "dummyuser";
-    strcpy(username,uname.c_str());
+    strcpy(username,localLoginUser.c_str());
 
     return retbool;
 }
