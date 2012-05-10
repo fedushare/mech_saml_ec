@@ -166,8 +166,7 @@ fprintf(stderr, "COMPARING (%s) and (%s)\n", input_string->value, MECH_SAML_EC_S
      if (!strncmp(input_string->value, MECH_SAML_EC_STRING, input_string->length
          && input_string->length == strlen(MECH_SAML_EC_STRING)))
      {
-         *output_oid = GSS_SAMLEC_MECHANISM;
-         return GSS_S_COMPLETE;
+         return duplicateOid(minor_status, GSS_SAMLEC_MECHANISM, output_oid);
      } else
          return GSS_S_FAILURE;
 }
