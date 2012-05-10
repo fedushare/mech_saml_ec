@@ -579,26 +579,11 @@ cleanup:
         rs_conn_destroy(ctx->acceptorCtx.radConn);
         ctx->acceptorCtx.radConn = NULL;
     }
-#else
-    if (!strncmp(inputToken->value, "SAML_ASSERTION_TO_SP", strlen("SAML_ASSERTION_TO_SP")))
-    {
-         fprintf(stderr, "GSSAPI Acceptor: Received SAML_ASSERTION_TO_SP from initiator\n");
-
-
-         /* TODO VSY: Need to set the following here:
- *          ctx->mechanismUsed should already be set automatically
- *          ctx->gssFlags
- *          ctx->initiatorName
- *          ctx->expiryTime (0 for indefinite)
- */
-    }
-
-        GSSEAP_SM_TRANSITION_NEXT(ctx);
-
-    major = GSS_S_COMPLETE;
-#endif
 
     return major;
+#else
+    return GSS_S_UNAVAILABLE;
+#endif
 }
 
 static OM_uint32
@@ -871,52 +856,50 @@ gssEapAcceptSecContext(OM_uint32 *minor,
     if (initialContextToken) {
         gss_buffer_desc innerToken = GSS_C_EMPTY_BUFFER;
 
+        // This sets ctx->mechanismUsed
         major = gssEapVerifyToken(minor, ctx, input_token, NULL,
                                   &innerToken);
-        /* TODO innerToken must either be NULL or have meaningful content */
         if (!GSS_ERROR(major)) {
             GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
+            /* innerToken must be empty */
+            GSSEAP_ASSERT(innerToken.length == 0);
+
             saml_req = getSAMLRequest2();
-            /* TODO VSY: we should really err out on saml_req being NULL */
-            major = makeStringBuffer(minor, saml_req?:"", output_token);
-            fprintf(stderr, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
+            if (saml_req != NULL) {
+                major = makeStringBuffer(minor, saml_req?:"", output_token);
+                free(saml_req); saml_req = NULL;
+            } else
+                major = GSS_S_FAILURE;
+
+            if (!GSS_ERROR(major)) {
+                fprintf(stderr, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
                    (char *)output_token->value);
-            free(saml_req);
-            saml_req = NULL;
-            if (!GSS_ERROR(major))
                 major = GSS_S_CONTINUE_NEEDED;
+            }
         }
     } else {
-        /* TODO: check for the real assertion here */
-        if (!strncmp(input_token->value, "SAML_ASSERTION_TO_SP", strlen("SAML_ASSERTION_TO_SP")))
-        {
-         fprintf(stderr, "GSSAPI Acceptor: Received SAML_ASSERTION_TO_SP from initiator\n");
-
-
-         /* TODO VSY: Need to set the following here:
- *          ctx->mechanismUsed should already be set automatically
- *          ctx->gssFlags
- *          ctx->initiatorName
- *          ctx->expiryTime (0 for indefinite)
- */
-        }
 
         // Allocate space for username string. MUST FREE LATER!!!
+        // TODO: have verifySAMLResponse allocate for username
         char* username = calloc(128,sizeof(char));
         int result = verifySAMLResponse((char*)input_token->value,
                                         (int)input_token->length,
                                         username);
-        fprintf(stderr,"Username = '%s'\n",username);
-        // May need to move this "free(username)" to later in the code
-        free(username);
 
-        /* ASSUME Assertion is Good for now !!! */
         if (result) {
+            gss_buffer_desc buf = {0, NULL};
+            fprintf(stderr,"Username = '%s'\n",username);
+            major = makeStringBuffer(minor, username, &buf);
+            if (major == GSS_S_COMPLETE)
+                major = gss_import_name(minor, &buf, GSS_C_NT_USER_NAME,
+                                 &ctx->initiatorName);
             major = GSS_S_COMPLETE;
         } else {
             major = GSS_S_FAILURE;
             *minor = GSSEAP_PEER_AUTH_FAILURE;
         }
+
+        free(username); username = NULL;
     }
 #endif
     if (GSS_ERROR(major))

@@ -69,7 +69,7 @@ gssEapAllocContext(OM_uint32 *minor,
     */
 #ifndef MECH_EAP
 /* VSY: Review the following; should we really be setting this always? */
-    ctx->gssFlags = GSS_C_MUTUAL_FLAG;      /*  contexts */
+    ctx->gssFlags = 0 /* GSS_C_MUTUAL_FLAG */;      /*  contexts */
 #else
     ctx->gssFlags = GSS_C_TRANS_FLAG    |   /* exporting contexts */
                     GSS_C_INTEG_FLAG    |   /* integrity */
