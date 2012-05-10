@@ -150,6 +150,7 @@ extern "C" char* getSAMLRequest2(void)
         SPConfig::Credentials |
         SPConfig::OutOfProcess |
         SPConfig::Caching |
+        SPConfig::Logging |
         SPConfig::Handlers
     );
     if (conf.init()) {
@@ -411,6 +412,9 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
     int retbool = 1;
     string localLoginUser = "";
 
+    XMLToolingConfig::getConfig().log_config("DEBUG");
+    Category& log = Category::getInstance(SHIBSP_LOGCAT".verifySAMLResponse");
+
     fprintf(stderr,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",saml);
 
     // Initialization code taken from resolvertest.cpp::main()
@@ -422,6 +426,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
         SPConfig::Credentials |
         SPConfig::OutOfProcess |
         SPConfig::Caching |
+        SPConfig::Logging |
         SPConfig::Handlers
     );
     if (conf.init()) {
@@ -585,6 +590,8 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                         } catch (bad_cast&) {
                                             cerr << "caught a bad_cast while extracting message details" << endl;
                                         }
+                                    } else { // Message is not SAML20P_NS - problem!
+                                        retbool = 0;
                                     }
                                     // End SAML2MessageDecoder::extractMessageDetails(*response,...)
                                   
@@ -600,7 +607,17 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                      * Each of which returns false if that evaluate() call does not apply to the message,
                                      *                       true if the message was successfully evaluated by the rule,
                                      *                       throw exception if rejected by rule. UGH!!!
+                                     * Unfortunately, m_rules is a private member, so can't get at it from here!
                                      */
+                                    if (retbool) {
+                                        try {
+                                            const XMLObject* responseobj = dynamic_cast<const XMLObject*>(response);
+                                            policy.evaluate(*responseobj);
+                                            cerr << "Successfully called policy.evaluate(*responseobj)" << endl;
+                                        } catch (exception& ex) {
+                                            retbool = 0;
+                                        }
+                                    }
 
                                     if (retbool) {
                                         // Check destination URL.
