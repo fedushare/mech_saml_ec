@@ -458,7 +458,9 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                         istringstream samlstream(samlstr);
                        
                         // Taken from SAML2ECPDecoder::decode()
+			cerr << "parsing samlstream..." << endl;
                         DOMDocument* doc = XMLToolingConfig::getConfig().getParser().parse(samlstream);
+			cerr << "samlstream parsing succeeded!" << endl;
                         XercesJanitor<DOMDocument> docjan(doc);
                         auto_ptr<XMLObject> token(XMLObjectBuilder::buildOneFromElement(doc->getDocumentElement(), true));
                         docjan.release();
@@ -648,6 +650,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
 
                     } catch (exception & ex) {
                         retbool = 0;
+			cerr << ex.what() << endl;
                     }
 
                 }
