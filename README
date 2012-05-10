@@ -50,7 +50,7 @@ gpgcheck=0' \
     libevent \
     libxml2-devel \
     libtool \
-    gcc
+    gcc gcc-c++
 
 (5) If you are running RHEL6 (may also apply to CentOS6), you may encounter a
 warning about libcurl which causes the library to segfault. This is due to
