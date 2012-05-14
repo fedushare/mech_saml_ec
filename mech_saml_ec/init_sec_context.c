@@ -580,46 +580,77 @@ write_data(void *buffer, size_t size, size_t nmemb, void *userp)
         return -1;
 }
 
-void
-sendToIdP(xmlDocPtr doc, char *idp, char *user, char *password,
-              gss_buffer_t response)
+char curl_err_msg[CURL_ERROR_SIZE+1];
+
+OM_uint32
+sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
+          char *user, char *password, gss_buffer_t response)
 {
-    CURL *curl;
-    CURLcode res;
+    CURL *curl = NULL;
+    CURLcode res = 0;
     xmlChar *mem = NULL;
-    int size;
-    char userpw[514]; /* TODO VSY: fix this */
+    int size = 0;
+    char userpw[514] = ""; /* TODO VSY: fix this */
+    OM_uint32 major = GSS_S_COMPLETE;
 
     xmlDocDumpFormatMemory(doc, &mem, &size, 0);
+    if (mem == NULL || size == 0) {
+        fprintf(stderr, "ERROR: xmlDocDumpFormatMemory failed to parse "
+                        "the XML doc to be sent to IdP\n");
+        *minor = GSSEAP_BAD_CONTEXT_TOKEN;
+        return GSS_S_FAILURE;
+    }
 
     curl = curl_easy_init();
-    if (curl && mem && size) {
-       
-    fprintf(stderr, "DOING HTTP POST to IdP (%s) using Basic Auth user (%s)\n",
-                    idp, user);
-       curl_easy_setopt(curl, CURLOPT_URL, idp);
 
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-
-        curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-        sprintf(userpw, "%s:%s", user, password);
-        curl_easy_setopt(curl, CURLOPT_USERPWD, userpw);
-
-        curl_easy_setopt(curl, CURLOPT_POST, 1);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, mem);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, size);
-
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
-
-        res = curl_easy_perform(curl);
-
-        /* always cleanup */
-        curl_easy_cleanup(curl);
+    if (!curl) {
+        fprintf(stderr, "ERROR: curl_easy_init failed\n");
+        *minor = GSSEAP_BAD_USAGE;
+        major = GSS_S_FAILURE;
     }
-}
 
+    fprintf(stdout, "DOING HTTP POST to IdP (%s) using Basic Auth user"
+                    " (%s)\n", idp, user);
+    sprintf(userpw, "%s:%s", user, password);
+    if ((res = curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err_msg)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_URL, idp)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_USERPWD, userpw)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_POST, 1)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, mem)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, size)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_WRITEDATA, response)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data)) != CURLE_OK) {
+        fprintf(stderr, "ERROR: curl_easy_setopt failure; %s\n", curl_easy_strerror(res));
+        *minor = GSSEAP_BAD_USAGE;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+
+    res = curl_easy_perform(curl);
+    if (res) {
+        fprintf(stderr, "ERROR: curl_easy_perform failed with return code "
+                        "(%d) and error (%s)\n", res, curl_err_msg);
+        *minor = GSSEAP_BAD_USAGE;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+
+    major = GSS_S_COMPLETE;
+
+cleanup:
+    if (mem)
+        xmlFree(mem);
+    mem = NULL;
+
+    if (curl)
+        curl_easy_cleanup(curl);
+    curl = NULL;
+
+    return major;
+}
 
 OM_uint32
 processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
@@ -628,21 +659,20 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
     char *idp = getenv(SAML_EC_IDP);
     char *user = cred->name->username.value;
     char *password = cred->password.value;
-    xmlDocPtr doc_fromsp;
-    xmlDocPtr doc_fromidp;
-    xmlNode *header_fromsp;
+    xmlDocPtr doc_from_sp = NULL;
+    xmlDocPtr doc_from_idp = NULL;
+    xmlNode *header_from_sp = NULL;
     gss_buffer_desc response_from_idp = {0, NULL};
     OM_uint32 major = GSS_S_COMPLETE;
     OM_uint32 tmpMinor = 0;
 
-fprintf(stderr, "IdP IS (%s)\n", idp?:"");
-fprintf(stderr, "USER IS (%s)\n", user);
-
-    /* TODO VSY: set minor below */
+    fprintf(stdout, "IdP IS (%s)\n", idp?:"");
+    fprintf(stdout, "USER IS (%s)\n", user);
 
     if (idp == NULL) {
         fprintf(stderr, "ERROR: NO IDP specified; please specify an IdP"
                 "using the environment variable (%s)\n", SAML_EC_IDP);
+        *minor = GSSEAP_BAD_SERVICE_NAME;
         return GSS_S_FAILURE;
     }
 
@@ -651,53 +681,156 @@ fprintf(stderr, "USER IS (%s)\n", user);
         fprintf(stderr, "ERROR: NO user/password info in credential; "
                         "please supply a credential acquired with "
                         "gss_acquire_cred_with_password() or variants\n");
+        *minor = GSSEAP_BAD_CRED_OPTION;
         return GSS_S_FAILURE;
     }
 
-    doc_fromsp = xmlReadMemory(request->value, request->length, "FROMSP", NULL, 0);
-    if (doc_fromsp != NULL)
-        xmlDocDump(stdout, doc_fromsp);
-    else
+    doc_from_sp = xmlReadMemory(request->value, request->length, "FROMSP", NULL, 0);
+    if (doc_from_sp != NULL) {
+        fprintf(stdout, "\n\nREQUEST FROM SP AS SEEN BY XML:\n");
+        xmlDocDump(stdout, doc_from_sp);
+    } else {
+        fprintf(stderr, "ERROR: Failure parsing document from SP\n");
+        *minor = GSSEAP_BAD_CONTEXT_TOKEN;
         return GSS_S_FAILURE;
+    }
 
     /* Exclude header */
-    header_fromsp = getElement(xmlDocGetRootElement(doc_fromsp), "Header");
-    xmlUnlinkNode(header_fromsp);
-    xmlDocDump(stdout, doc_fromsp);
+    header_from_sp = getElement(xmlDocGetRootElement(doc_from_sp), "Header");
+    if (header_from_sp == NULL) {
+        fprintf(stderr, "ERROR: No Header in SAML Request from SP\n");
+        *minor = GSSEAP_BAD_TOK_HEADER;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+    xmlUnlinkNode(header_from_sp);
+    fprintf(stdout, "\nSENDING TO IDP:\n");
+    xmlDocDump(stdout, doc_from_sp);
 
     /* Send doc to IdP */
     /* TODO: Error checking here and elsewhere */
-    sendToIdP(doc_fromsp, idp, user, password, &response_from_idp);
-
-fprintf(stdout, "RECEIVED FROM IDP (%s)\n", (char *) response_from_idp.value);
-
-    /* Empty header from IdP and populate with RelayState from
- *     header received from SP */
-    doc_fromidp = xmlReadMemory(response_from_idp.value,
-                  response_from_idp.length, "FROMIDP", NULL, 0);
-    gss_release_buffer(&tmpMinor, &response_from_idp);
-
-    if (doc_fromidp != NULL) {
-        xmlNode *header_fromidp = NULL;
-        xmlNode *relay_state = NULL;
-        xmlDocDump(stdout, doc_fromidp);
-        header_fromidp = getElement(xmlDocGetRootElement(doc_fromidp), "Header");
-        if (header_fromidp == NULL)
-            return GSS_S_FAILURE;
-
-        freeChildren(header_fromidp);
-        relay_state = getElement(header_fromsp, "RelayState");
-
-        xmlAddChild(header_fromidp, xmlCopyNode(relay_state, 1));
-fprintf(stdout, "SENDING TO SP >>>>>>>>>>>>>>>>>>>\n");
-        xmlDocDump(stdout, doc_fromidp);
-        xmlDocDumpMemory(doc_fromidp, (char *)&response->value, (int *)&response->length);
-        major = GSS_S_COMPLETE;
-    } else {
-fprintf(stderr, "SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
-        major = makeStringBuffer(minor, SOAP_FAULT_MSG, response);
-        major = GSS_S_FAILURE;
+    major = sendToIdP(minor, doc_from_sp, idp, user, password, &response_from_idp);
+    if (major != GSS_S_COMPLETE) {
+        fprintf(stderr, "ERROR: Failure sending SAML Request to IdP\n");
+        goto cleanup;
     }
+
+    if (response_from_idp.value == NULL) {
+        fprintf(stderr, "ERROR: No response from IdP\n");
+        *minor = GSSEAP_IDENTITY_SERVICE_UNKNOWN_ERROR;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+
+    fprintf(stdout, "\n\nRECEIVED FROM IDP:\n%s\n", (char *) response_from_idp.value);
+
+    /* Empty the header from IdP and populate with RelayState from
+     *     header received from SP */
+    doc_from_idp = xmlReadMemory(response_from_idp.value,
+                  response_from_idp.length, "FROMIDP", NULL, 0);
+    if (doc_from_idp == NULL) {
+        fprintf(stderr, "ERROR: No response from IdP\n");
+        *minor = GSSEAP_IDENTITY_SERVICE_UNKNOWN_ERROR;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    } else {
+        xmlNode *header_from_idp = NULL;
+        xmlNode *relay_state = NULL;
+        xmlNode *request_from_sp = NULL;
+        xmlNode *response_from_idp = NULL;
+        char *responseConsumerURL = NULL;
+        char *AssertionConsumerServiceURL = NULL;
+
+        fprintf(stdout, "AS SEEN BY XML:\n");
+        xmlDocDump(stdout, doc_from_idp);
+
+        /* Compare responseConsumerURL from original request with
+         * AssertionConsumerServiceURL from response from IdP */
+        request_from_sp = getElement(header_from_sp, "Request");
+        if (request_from_sp == NULL) {
+            fprintf(stderr, "ERROR: No Request element in SAML Request Header from SP\n");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+
+        responseConsumerURL = xmlGetProp(request_from_sp, "responseConsumerURL");
+        if (responseConsumerURL == NULL) {
+            fprintf(stderr, "ERROR: No responseConsumerURL attribute in SAML Request Header from SP\n");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+
+        response_from_idp = getElement(xmlDocGetRootElement(doc_from_idp), "Response");
+        if (response_from_idp == NULL) {
+            fprintf(stderr, "ERROR: No Response element in SAML Response from IdP\n");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+
+        AssertionConsumerServiceURL = xmlGetProp(response_from_idp, "AssertionConsumerServiceURL");
+        if (AssertionConsumerServiceURL == NULL) {
+            fprintf(stderr, "ERROR: No AssertionConsumerServiceURL attribute in SAML Response from IdP\n");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+
+        if(strcmp(responseConsumerURL, AssertionConsumerServiceURL)) {
+            fprintf(stderr, "ERROR: responseConsumerURL (%s) and "
+                    "AssertionConsumerServiceURL (%s) do not match\n",
+                    responseConsumerURL, AssertionConsumerServiceURL);
+            *minor = GSSEAP_PEER_AUTH_FAILURE;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        } else
+            fprintf(stdout, "NOTE: responseConsumerURL (%s) and "
+                    "AssertionConsumerServiceURL (%s) match\n",
+                    responseConsumerURL, AssertionConsumerServiceURL);
+
+        header_from_idp = getElement(xmlDocGetRootElement(doc_from_idp), "Header");
+        if (header_from_idp == NULL) {
+            fprintf(stderr, "ERROR: No Header element in SAML Response from IdP\n");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+
+        freeChildren(header_from_idp);
+        relay_state = getElement(header_from_sp, "RelayState");
+        if (relay_state == NULL) {
+            fprintf(stderr, "ERROR: No RelayState element in SAML Request from SP\n");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+
+        if (xmlAddChild(header_from_idp, xmlCopyNode(relay_state, 1)) == NULL) {
+            fprintf(stderr, "ERROR: Failure adding RelayState to Header from IdP\n");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+
+        fprintf(stdout, "SENDING TO SP >>>>>>>>>>>>>>>>>>>\n");
+        xmlDocDump(stdout, doc_from_idp);
+
+        xmlDocDumpMemory(doc_from_idp, (char *)&response->value,
+                  (int *)&response->length);
+        major = GSS_S_COMPLETE;
+    }
+
+cleanup:
+    if (doc_from_sp)
+        xmlFreeDoc(doc_from_sp);
+
+    if (doc_from_idp)
+        xmlFreeDoc(doc_from_idp);
+
+    if (response_from_idp.value)
+        gss_release_buffer(&tmpMinor, &response_from_idp);
 
     return major;
 }
@@ -781,21 +914,11 @@ cleanup:
 
     wpabuf_set(&ctx->initiatorCtx.reqData, NULL, 0);
     peerConfigFree(&tmpMinor, ctx);
-#else
-#if 0
-    if (!strncmp(inputToken->value, "SAML_AUTHREQUEST", strlen("SAML_AUTHREQUEST")))
-    {
-         fprintf(stderr, "GSSAPI Initiator: Received SAML_AUTHREQUEST from Acceptor\n");
-         major = makeStringBuffer(minor, "SAML_ASSERTION_TO_SP", outputToken);
-    }
-#else
-    major = processSAMLRequest(minor, cred, inputToken, outputToken);
-#endif
-
-    major = GSS_S_COMPLETE;
 
     GSSEAP_SM_TRANSITION_NEXT(ctx);
         *smFlags |= SM_FLAG_OUTPUT_TOKEN_CRITICAL;
+#else
+    major = GSS_S_UNAVAILABLE;
 #endif
 
     return major;
@@ -1061,16 +1184,9 @@ gssEapInitSecContext(OM_uint32 *minor,
     } else {
         major = processSAMLRequest(minor, cred, input_token, output_token);
         if (major != GSS_S_COMPLETE) {
-            /* TODO: Send a fault msg to SP */
+            fprintf(stderr, "ERROR: SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
+            makeStringBuffer(&tmpMinor, SOAP_FAULT_MSG, output_token);
         }
-#if 0
- else {
-            major = makeStringBuffer(minor, saml_response, output_token);
-            if (!GSS_ERROR(major))
-                /* TODO: Set the below needed info */
-                major = GSS_S_COMPLETE;
-        }
-#endif
     }
 #endif
     if (GSS_ERROR(major))
@@ -1158,19 +1274,6 @@ gss_init_sec_context(OM_uint32 *minor,
                                  output_token,
                                  ret_flags,
                                  time_rec);
-#ifndef MECH_EAP
-/* VSY: Cred delegation not supported in SAML EC, so GSS_C_DELEG_FLAG should be FALSE
- * VSY: Per kitten, GSS_C_MUTUAL_FLAG is always set but it also says:
- * "The mutual authentication property of this mechanism relies on
- *  successfully comparing the TLS server identity with the negotiated
- *  target name.  Since the TLS channel is managed by the application
- *  outside of the GSS-API mechanism, the mechanism itself is unable to
- *  confirm the name while the application is able to perform this
- *  comparison for the mechanism.  For this reason, applications MUST
- *  match the TLS server identity with the target name, as discussed in
- *  [RFC6125]."
-*/
-#endif
 
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 

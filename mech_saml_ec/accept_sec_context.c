@@ -209,10 +209,9 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 
     wpabuf_free(reqData);
 #else
-    /* major = makeStringBuffer(minor, "SAML_AUTHREQUEST", outputToken); */
     saml_req = getSAMLRequest2();
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
-    fprintf(stderr, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
+    fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
            (char *)outputToken->value);
     free(saml_req);
     saml_req = NULL;
@@ -872,7 +871,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                 major = GSS_S_FAILURE;
 
             if (!GSS_ERROR(major)) {
-                fprintf(stderr, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
+                fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
                    (char *)output_token->value);
                 major = GSS_S_CONTINUE_NEEDED;
             }
@@ -888,7 +887,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
 
         if (result) {
             gss_buffer_desc buf = {0, NULL};
-            fprintf(stderr,"Username = '%s'\n",username);
+            fprintf(stdout,"Username = '%s'\n",username);
             major = makeStringBuffer(minor, username, &buf);
             if (major == GSS_S_COMPLETE)
                 major = gss_import_name(minor, &buf, GSS_C_NT_USER_NAME,
