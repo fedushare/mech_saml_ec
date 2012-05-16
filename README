@@ -1,7 +1,17 @@
-Installing RPMs:
+This is an open source implementation of https://tools.ietf.org/html/draft-ietf-kitten-sasl-saml-ec.
+
+View and report issues at: https://github.com/jbasney/mech_saml_ec/issues
+
+Discuss at: https://groups.google.com/d/forum/saml-ec-gssapi-dev
+
+-------------------------------------
+
+Installing required RPMs:
 
 (Instructions taken from 
 http://www.project-moonshot.org/devwiki/ConfiguringRHEL/)
+
+(Do we need to use Moonshot RPMs? See https://github.com/jbasney/mech_saml_ec/issues/2).
 
 (1) Install EPEL:
 
@@ -102,6 +112,8 @@ Building The Code:
 # ./autogen.sh
 # ./configure --with-opensaml=/opt/moonshot/ --with-shibresolver=/opt/moonshot/ --with-shibsp=/opt/moonshot/
 # make
+
+-------------------------------------
 
 Testing Library with MIT GSS example programs:
 
