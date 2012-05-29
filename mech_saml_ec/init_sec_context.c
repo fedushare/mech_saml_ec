@@ -40,7 +40,9 @@
 #include <libxml/xmlreader.h>
 #include <curl/curl.h>
 
-#define SAML_EC_IDP	"SAML_EC_IDP"
+#define SAML_EC_IDP		"SAML_EC_IDP"
+#define SAML_EC_USER_CERT	"SAML_EC_USER_CERT"
+#define SAML_EC_USER_KEY	"SAML_EC_USER_KEY"
 
 #define SOAP_FAULT_MSG "<?xml version='1.0' encoding='UTF-8'?>" \
 		"<S:Envelope xmlns:S=\"http://schemas.xmlsoap.org/soap/envelope/\">" \
@@ -543,7 +545,7 @@ getElement(xmlNode *a_node, char *name)
     xmlNode *ret_node = NULL;
 
     for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
-            printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, cur_node->content?(cur_node->content):"");
+            /* printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, cur_node->content?(cur_node->content):""); */
         if (cur_node->type == XML_ELEMENT_NODE && !strcmp(cur_node->name, name)) {
                 return cur_node;
         }
@@ -584,14 +586,56 @@ char curl_err_msg[CURL_ERROR_SIZE+1];
 
 OM_uint32
 sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
-          char *user, char *password, gss_buffer_t response)
+          gss_cred_id_t cred, gss_buffer_t response)
 {
     CURL *curl = NULL;
     CURLcode res = 0;
     xmlChar *mem = NULL;
     int size = 0;
+    char *user = cred->name->username.value;
+    char *password = cred->password.value;
+    char *certfile = getenv(SAML_EC_USER_CERT);
+    char *keyfile = getenv(SAML_EC_USER_KEY);
     char userpw[514] = ""; /* TODO VSY: fix this */
     OM_uint32 major = GSS_S_COMPLETE;
+
+    fprintf(stdout, "USER IS (%s)\n", user?:"");
+
+    if ((certfile && !keyfile) || (keyfile && !certfile)) {
+        fprintf(stderr, "NOTICE: One of either SAML_EC_USER_CERT or "
+                        "SAML_EC_USER_KEY is not set. Unable to use "
+                        "certificate authentication.\n");
+        certfile = keyfile = NULL;
+    }
+
+    if ((user && !password) || (password && !user)) {
+        fprintf(stderr, "NOTICE: One of either username or "
+                        "password is NULL. Unable to use username/password "
+                        "for authentication.\n");
+        user = password = NULL;
+    }
+
+    /* Certificate authentication takes priority */
+    if (certfile && keyfile) {
+        fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Cert Auth cert"
+                    " (%s) key (%s)\n", idp, certfile, keyfile);
+        user = password = NULL;
+    } else if (user && password) {
+        fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Basic Auth user"
+                    " (%s)\n", idp, user);
+        sprintf(userpw, "%s:%s", user, password);
+        certfile = keyfile = NULL;
+    } else {
+        fprintf(stderr, "ERROR: NO user/password info in credential; "
+                        "please supply a credential acquired with "
+                        "gss_acquire_cred_with_password() or variants;\n"
+                        "You can also alternatively specify client cert/key "
+                        "files by setting env vars SAML_EC_USER_CERT and "
+                        "SAML_EC_USER_KEY. Client certificate will be used "
+                        "if set instead of username/password.\n");
+        *minor = GSSEAP_BAD_CRED_OPTION;
+        return GSS_S_FAILURE;
+    }
 
     xmlDocDumpFormatMemory(doc, &mem, &size, 0);
     if (mem == NULL || size == 0) {
@@ -609,15 +653,20 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         major = GSS_S_FAILURE;
     }
 
-    fprintf(stdout, "DOING HTTP POST to IdP (%s) using Basic Auth user"
-                    " (%s)\n", idp, user);
-    sprintf(userpw, "%s:%s", user, password);
     if ((res = curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err_msg)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_URL, idp)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC)) != CURLE_OK ||
-        (res = curl_easy_setopt(curl, CURLOPT_USERPWD, userpw)) != CURLE_OK ||
+        (user && (res = curl_easy_setopt(curl, CURLOPT_USERPWD, userpw)) != CURLE_OK) ||
+        (certfile && ((res = curl_easy_setopt(curl, CURLOPT_SSLCERT, certfile)) != CURLE_OK ||
+                      (res = curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, "PEM")) != CURLE_OK ||
+                      (res = curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL)) != CURLE_OK ||
+                      (res = curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_DEFAULT)) != CURLE_OK)) ||
+        (keyfile && ((res = curl_easy_setopt(curl, CURLOPT_SSLKEY, keyfile)) != CURLE_OK ||
+                      (res = curl_easy_setopt(curl, CURLOPT_SSLKEYTYPE, "PEM")) != CURLE_OK ||
+                      (res = curl_easy_setopt(curl, CURLOPT_KEYPASSWD, "")) != CURLE_OK)) ||
+        (res = curl_easy_setopt(curl, CURLOPT_VERBOSE, 1)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_POST, 1)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, mem)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, size)) != CURLE_OK ||
@@ -636,6 +685,47 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         *minor = GSSEAP_BAD_USAGE;
         major = GSS_S_FAILURE;
         goto cleanup;
+    }
+
+    long http_code = 0;
+    res = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    if (res != CURLE_OK) {
+        fprintf(stderr, "ERROR: curl_easy_getinfo failed with return code "
+                        "(%d) and error (%s)\n", res, curl_err_msg);
+        *minor = GSSEAP_BAD_USAGE;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+    if (http_code != 200) {
+        fprintf(stderr, "ERROR: HTTPS failed with status code (%d)\n",
+                                 http_code);
+        *minor = GSSEAP_BAD_USAGE;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+
+    char *content_type = NULL;
+    res = curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
+    if (res != CURLE_OK) {
+        fprintf(stderr, "ERROR: curl_easy_getinfo failed with return code "
+                        "(%d) and error (%s)\n", res, curl_err_msg);
+        *minor = GSSEAP_BAD_USAGE;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+    if (content_type == NULL) {
+        fprintf(stderr, "ERROR: IdP DID NOT SEND A CONTENT TYPE IN HEADER.\n");
+        *minor = GSSEAP_BAD_USAGE;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    } else {
+        fprintf(stdout, "CONTENT TYPE FROM IDP IS: %s", content_type);
+        if (!strcasestr(content_type, "xml")) {
+            fprintf(stderr, "ERROR: IdP DID NOT SEND XML DOCUMENT BACK.\n");
+            *minor = GSSEAP_BAD_USAGE;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
     }
 
     major = GSS_S_COMPLETE;
@@ -657,8 +747,6 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
                  gss_buffer_t request, gss_buffer_t response)
 {
     char *idp = getenv(SAML_EC_IDP);
-    char *user = cred->name->username.value;
-    char *password = cred->password.value;
     xmlDocPtr doc_from_sp = NULL;
     xmlDocPtr doc_from_idp = NULL;
     xmlNode *header_from_sp = NULL;
@@ -667,21 +755,11 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
     OM_uint32 tmpMinor = 0;
 
     fprintf(stdout, "IdP IS (%s)\n", idp?:"");
-    fprintf(stdout, "USER IS (%s)\n", user);
 
     if (idp == NULL) {
         fprintf(stderr, "ERROR: NO IDP specified; please specify an IdP"
                 "using the environment variable (%s)\n", SAML_EC_IDP);
         *minor = GSSEAP_BAD_SERVICE_NAME;
-        return GSS_S_FAILURE;
-    }
-
-    if (user == NULL) {
-        /* TODO: check for a non-NULL password as well? */
-        fprintf(stderr, "ERROR: NO user/password info in credential; "
-                        "please supply a credential acquired with "
-                        "gss_acquire_cred_with_password() or variants\n");
-        *minor = GSSEAP_BAD_CRED_OPTION;
         return GSS_S_FAILURE;
     }
 
@@ -709,9 +787,9 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
 
     /* Send doc to IdP */
     /* TODO: Error checking here and elsewhere */
-    major = sendToIdP(minor, doc_from_sp, idp, user, password, &response_from_idp);
+    major = sendToIdP(minor, doc_from_sp, idp, cred, &response_from_idp);
     if (major != GSS_S_COMPLETE) {
-        fprintf(stderr, "ERROR: Failure sending SAML Request to IdP\n");
+        fprintf(stderr, "ERROR: Failure communicating with IdP\n");
         goto cleanup;
     }
 
