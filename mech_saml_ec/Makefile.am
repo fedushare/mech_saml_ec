@@ -143,9 +143,7 @@ endif
 
 if SHIBRESOLVER
 mech_saml_ec_la_SOURCES += util_shib.cpp	\
-	SAML2XML.cpp				\
-	MechResponse.cpp			\
-	MechRequest.cpp
+	SAML2XML.cpp
 endif
 
 endif
