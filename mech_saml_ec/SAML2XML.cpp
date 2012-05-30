@@ -29,6 +29,7 @@
 #include <xmltooling/impl/AnyElement.h>
 #include <xmltooling/security/Credential.h>
 #include <xmltooling/security/CredentialResolver.h>
+#include <xmltooling/security/SignatureTrustEngine.h>
 #include <xmltooling/signature/Signature.h>
 #include <xmltooling/util/ParserPool.h>
 #include <xmltooling/util/XMLHelper.h>
@@ -97,6 +98,26 @@ void generateRandomHex(std::string& buf, unsigned int len) {
     }
 }
 
+// Set the config options only once
+SPConfig& getConf(void) {
+    static SPConfig& conf = SPConfig::getConfig();
+    static int featuresSet = 0;
+    if (!featuresSet) {
+        featuresSet = 1;
+        conf.setFeatures(
+            SPConfig::Metadata |
+            SPConfig::Trust |
+            SPConfig::AttributeResolution |
+            SPConfig::Credentials |
+            SPConfig::OutOfProcess |
+            SPConfig::Caching |
+            SPConfig::Logging |
+            SPConfig::Handlers
+        );
+    }
+    return conf;
+}
+
 // Taken from resolvertest.cpp
 // This is necessary since resolveAttributes is protected and thus cannot be called 
 // from a local instance of a Handler/AssertionConsumerService object.
@@ -142,17 +163,7 @@ extern "C" char* getSAMLRequest2(void)
     string retstr = "";
 
     // Initialization code taken from resolvertest.cpp::main()
-    SPConfig& conf = SPConfig::getConfig();
-    conf.setFeatures(
-        SPConfig::Metadata |
-        SPConfig::Trust |
-        SPConfig::AttributeResolution |
-        SPConfig::Credentials |
-        SPConfig::OutOfProcess |
-        SPConfig::Caching |
-        SPConfig::Logging |
-        SPConfig::Handlers
-    );
+    SPConfig& conf = getConf();
     if (conf.init()) {
         if (conf.instantiate()) {
             ServiceProvider* sp = conf.getServiceProvider();
@@ -418,17 +429,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
     fprintf(stderr,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",saml);
 
     // Initialization code taken from resolvertest.cpp::main()
-    SPConfig& conf = SPConfig::getConfig();
-    conf.setFeatures(
-        SPConfig::Metadata |
-        SPConfig::Trust |
-        SPConfig::AttributeResolution |
-        SPConfig::Credentials |
-        SPConfig::OutOfProcess |
-        SPConfig::Caching |
-        SPConfig::Logging |
-        SPConfig::Handlers
-    );
+    SPConfig& conf = getConf();
     if (conf.init()) {
         if (conf.instantiate()) {
             ServiceProvider* sp = conf.getServiceProvider();
@@ -455,7 +456,14 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                     // SAML2POSTTEST.h line 38
                     vector<const SecurityPolicyRule*> rules =
                         app->getServiceProvider().getPolicyRules(app->getString("policyId").second);
-                    policy.getRules().assign(rules.begin(), rules.end());
+                    rules.push_back(SAMLConfig::getConfig().SecurityPolicyRuleManager.newPlugin(BEARER_POLICY_RULE, nullptr));
+                    policy.getRules().assign(rules.begin(),rules.end());
+                    /*
+                    vector<const SecurityPolicyRule*>::iterator it;
+                    for (it = rules.begin(); it < rules.end(); it++) {
+                        cerr << "rule = " << (*it)->getType() << endl;
+                    }
+                    */
 
                     // Taken from util/resolvertest.cpp and SAML2ECPDecoder::decode()
                     try {
@@ -463,9 +471,9 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                         istringstream samlstream(samlstr);
                        
                         // Taken from SAML2ECPDecoder::decode()
-			cerr << "parsing samlstream..." << endl;
+                        cerr << "parsing samlstream..." << endl;
                         DOMDocument* doc = XMLToolingConfig::getConfig().getParser().parse(samlstream);
-			cerr << "samlstream parsing succeeded!" << endl;
+                        cerr << "samlstream parsing succeeded!" << endl;
                         XercesJanitor<DOMDocument> docjan(doc);
                         auto_ptr<XMLObject> token(XMLObjectBuilder::buildOneFromElement(doc->getDocumentElement(), true));
                         docjan.release();
@@ -613,11 +621,43 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                      */
                                     if (retbool) {
                                         try {
-                                            const XMLObject* responseobj = dynamic_cast<const XMLObject*>(response);
-                                            policy.evaluate(*responseobj);
-                                            cerr << "Successfully called policy.evaluate(*responseobj)" << endl;
+                                            // const XMLObject* responseobj = dynamic_cast<const XMLObject*>(response);
+vector<const SecurityPolicyRule*> m_rules = policy.getRules();
+for (vector<const SecurityPolicyRule*>::const_iterator i=m_rules.begin(); i!=m_rules.end(); ++i) {
+    cerr << "rule type = " << (*i)->getType() << endl;
+    if (strcmp(((*i)->getType()),"XMLSigning") == 0) {
+        cerr << "checking details of XMLSigning... ";
+        if (!policy.getIssuerMetadata()) {
+            cerr << "ignoring message, no issuer metadata supplied" << endl;
+        }
+
+        const SignatureTrustEngine* sigtrust;
+        if (!(sigtrust=dynamic_cast<const SignatureTrustEngine*>(policy.getTrustEngine()))) {
+            cerr << "ignoring message, no SignatureTrustEngine supplied" << endl;
+        }
+        
+        const SignableObject* signable = dynamic_cast<const SignableObject*>(response);
+        if (!signable) {
+            cerr << "ignoring message, cannot cast to SignableObject" << endl;
+        } else if (!signable->getSignature()) {
+            cerr << "ignoring message, no signature" << endl;
+        }
+        cerr << "Done!" << endl;
+
+        /*
+        DOMElement *elem = response->getDOM();
+        stringstream s;
+        s << *elem;
+        cerr << "-----" << endl << "s.str() = " << s.str() << endl << "-----" << endl;
+        */
+    }
+}
+
+                                            policy.evaluate(*response);
+                                            cerr << "Successfully called policy.evaluate(*response)" << endl;
                                         } catch (exception& ex) {
                                             retbool = 0;
+                                            cerr << "Caught exception on policy.evaluate(): " << ex.what() << endl;
                                         }
                                     }
 
@@ -633,8 +673,8 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
 
                                     // Check for RelayState header.
                                     // Do we need to do something "useful" with the RelayState?
-                                    string relayState;
                                     if ((retbool) && (env->getHeader())) {
+                                        string relayState;
                                         static const XMLCh RelayState[] = UNICODE_LITERAL_10(R,e,l,a,y,S,t,a,t,e);
                                         const vector<XMLObject*>& blocks = const_cast<const Header*>(env->getHeader())->getUnknownXMLObjects();
                                         vector<XMLObject*>::const_iterator h =
@@ -645,8 +685,8 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                             if (rs.get())
                                                 relayState = rs.get();
                                         }
+                                        cout << "relayState = " << relayState << endl;
                                     }
-                                    cout << "relayState = " << relayState << endl;
 
                                     token.release();
                                     body->detach(); // frees Envelope
@@ -667,7 +707,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
 
                     } catch (exception & ex) {
                         retbool = 0;
-			cerr << ex.what() << endl;
+                        cerr << "Caught exception: " << ex.what() << endl;
                     }
 
                 }
