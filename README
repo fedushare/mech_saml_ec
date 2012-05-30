@@ -107,6 +107,19 @@ requires two steps:
 
 -------------------------------------
 
+Testing your IdP configuration:
+
+Before trying the SAML EC GSS mechanism, first confirm that your SAML
+IdP supports the SAML ECP Profile. A testecp.sh shell script (from the
+Shibboleth project) is provided for this purpose. Edit the testecp.sh
+file to set the needed parameters, then run it:
+
+# ./testecp.sh 
+Enter host password for user 'example':
+ECP request successful!
+
+-------------------------------------
+
 Building The Code:
 
 # ./autogen.sh
