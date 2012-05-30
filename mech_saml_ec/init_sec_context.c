@@ -615,17 +615,16 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         user = password = NULL;
     }
 
-    /* Certificate authentication takes priority */
     if (certfile && keyfile) {
         fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Cert Auth cert"
                     " (%s) key (%s)\n", idp, certfile, keyfile);
-        user = password = NULL;
-    } else if (user && password) {
+    }
+    if (user && password) {
         fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Basic Auth user"
                     " (%s)\n", idp, user);
         sprintf(userpw, "%s:%s", user, password);
-        certfile = keyfile = NULL;
-    } else {
+    }
+    if (!user && !password && !certfile && !keyfile) {
         fprintf(stderr, "ERROR: NO user/password info in credential; "
                         "please supply a credential acquired with "
                         "gss_acquire_cred_with_password() or variants;\n"
