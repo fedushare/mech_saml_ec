@@ -656,11 +656,12 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         (res = curl_easy_setopt(curl, CURLOPT_URL, idp)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L)) != CURLE_OK ||
-        (res = curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC)) != CURLE_OK ||
-        (user && (res = curl_easy_setopt(curl, CURLOPT_USERPWD, userpw)) != CURLE_OK) ||
+        /* Per curl_easy_opt(3) this is for FTP but perhaps also for HTTP? */
+        (res = curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL)) != CURLE_OK ||
+        (user && ((res = curl_easy_setopt(curl, CURLOPT_USERPWD, userpw)) != CURLE_OK ||
+                  (res = curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC)) != CURLE_OK)) ||
         (certfile && ((res = curl_easy_setopt(curl, CURLOPT_SSLCERT, certfile)) != CURLE_OK ||
                       (res = curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, "PEM")) != CURLE_OK ||
-                      (res = curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL)) != CURLE_OK ||
                       (res = curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_DEFAULT)) != CURLE_OK)) ||
         (keyfile && ((res = curl_easy_setopt(curl, CURLOPT_SSLKEY, keyfile)) != CURLE_OK ||
                       (res = curl_easy_setopt(curl, CURLOPT_SSLKEYTYPE, "PEM")) != CURLE_OK ||
