@@ -175,7 +175,7 @@ extern "C" char* getSAMLRequest2(void)
                 // BUT, e is "const DOMElement*" and I have no idea what
                 // actually calls the constructor, so no idea what 'e' is.
                 // Thus the encoder may be incomplete.
-                DOMElement* e;
+                DOMElement* e = 0;
                 const MessageEncoder* encoder = nullptr;
                 try {
                     encoder = SAMLConfig::getConfig().MessageEncoderManager.newPlugin(SAML20_BINDING_PAOS, pair<const DOMElement*,const XMLCh*>(e,nullptr));
