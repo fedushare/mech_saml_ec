@@ -56,9 +56,9 @@ using namespace xmltooling;
 using namespace std;
 
 // Taken from http://stackoverflow.com/questions/504810/
-const char* getfqdn() 
+static string getfqdn()
 {
-    const char* retstr;
+    string retstr;
     struct addrinfo hints, *info, *p;
     int gai_result;
 
@@ -78,6 +78,8 @@ const char* getfqdn()
     for (p = info; p != NULL; p = p->ai_next) {
         retstr = p->ai_canonname;
     }
+
+    freeaddrinfo(info);
     return retstr;
 }
 
@@ -176,9 +178,9 @@ extern "C" char* getSAMLRequest2(void)
                 // actually calls the constructor, so no idea what 'e' is.
                 // Thus the encoder may be incomplete.
                 DOMElement* e = 0;
-                const MessageEncoder* encoder = nullptr;
                 try {
-                    encoder = SAMLConfig::getConfig().MessageEncoderManager.newPlugin(SAML20_BINDING_PAOS, pair<const DOMElement*,const XMLCh*>(e,nullptr));
+                    const MessageEncoder* encoder = SAMLConfig::getConfig().MessageEncoderManager.newPlugin(SAML20_BINDING_PAOS, pair<const DOMElement*,const XMLCh*>(e,nullptr));
+                    delete encoder;
                 } catch (exception & ex) {
                 }
                 
@@ -209,10 +211,10 @@ extern "C" char* getSAMLRequest2(void)
                 
                 // Taken from AbstractSPRequest::getHandlerURL()
                 string m_handlerURL;
-                const char* fqdn = getfqdn();
+                string fqdn = getfqdn();
                 string resourcestr;
                 const char* resource;
-                resourcestr = "https://" + string(fqdn) + "/";
+                resourcestr = "https://" + fqdn + "/";
                 resource = resourcestr.c_str();
                 const char* handler = nullptr;
                 const PropertySet* props = app->getPropertySet("Sessions");
@@ -710,6 +712,11 @@ for (vector<const SecurityPolicyRule*>::const_iterator i=m_rules.begin(); i!=m_r
                         cerr << "Caught exception: " << ex.what() << endl;
                     }
 
+                // XXX This is here to force a cleanup of any role the
+                // SecurityPolicy object allocated, which really seems
+                // like a bug in the SAML library's implementation of
+                // the SecurityPolicy destructor for not cleaning it up.
+                policy.setRole(nullptr);
                 }
             }
             sp->unlock();
