@@ -162,5 +162,7 @@ boingo.ncsa.uiuc.edu. Anyone can use this IdP with the following login:
     Username: test
     Password: test
 
-Note that the 'test' account is only avaiable for ECP connections.
+Note that the 'test' account is only avaiable for ECP connections. Also, any
+external SP needs to be added to boingo's configuration via the
+<MetadataProvider> option. 
 
