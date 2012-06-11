@@ -152,3 +152,15 @@ Testing Library with MIT GSS example programs:
 # export SAML_EC_IDP='https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP'    # Use your IdP's ECP endpoint
 # ./gss-client -nw -nx -nm -port 3490 -user <username> -pass <password> -mech "{ 1 3 6 1 4 1 11591 4 6 }" localhost test testmessage
 
+-------------------------------------
+
+Open Test IdP available at boingo.ncsa.uiuc.edu:
+
+The testclient.sh script connects to a Shibboleth IdP configured at
+boingo.ncsa.uiuc.edu. Anyone can use this IdP with the following login:
+
+    Username: test
+    Password: test
+
+Note that the 'test' account is only avaiable for ECP connections.
+
