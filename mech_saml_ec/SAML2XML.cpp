@@ -420,6 +420,72 @@ extern "C" char* getSAMLRequest2(void)
     return cstr; //  Must free() returned char*
 }
 
+// Returns a vector of pointers to all SAML2 assertions found in
+// a SAML2 response.  Any encrypted assertions are decrypted and also
+// included in the vector.  Caller is responsible for memory allocated
+// to all elements in the returned vector.
+static vector<saml2::Assertion*> extractAssertions(const Response& resp,
+                                                   const Application& app,
+                                                   const SecurityPolicy& sp)
+    {
+    vector<saml2::Assertion*> retval;
+    for ( size_t i = 0; i < resp.getAssertions().size(); ++i )
+        retval.push_back(resp.getAssertions()[i]->cloneAssertion());
+
+    const vector<saml2::EncryptedAssertion*>& encassertions =
+        resp.getEncryptedAssertions();
+
+    if ( ! encassertions.empty() )
+        {
+        CredentialResolver* cr = app.getCredentialResolver();
+        if ( ! cr )
+            {
+            cerr << "Response contained encrypted assertion, "
+                 <<  "but no CredentialResolver available." << endl;
+            return retval;
+            }
+
+        for ( size_t i = 0; i < encassertions.size(); ++i )
+            {
+            try
+                {
+                Locker credlocker(cr);
+                const EntityDescriptor* entity = nullptr;
+                if ( sp.getIssuerMetadata() )
+                  entity = dynamic_cast<const EntityDescriptor*>(
+                    sp.getIssuerMetadata()->getParent());
+                auto_ptr<MetadataCredentialCriteria> mcc(
+                  sp.getIssuerMetadata() ?
+                  new MetadataCredentialCriteria(*sp.getIssuerMetadata())
+                  : nullptr);
+                auto_ptr<XMLObject> tokenwrapper(encassertions[i]->decrypt(*cr,
+                  app.getRelyingParty(entity)->getXMLString("entityID").second,
+                  mcc.get()));
+                saml2::Assertion* decassertion =
+                  dynamic_cast<saml2::Assertion*>(tokenwrapper.get());
+
+                if ( decassertion )
+                    {
+                    cerr << "Decrypted assertion." << endl;
+                    retval.push_back(decassertion->cloneAssertion());
+                    delete decassertion;
+                    tokenwrapper.release();
+                    }
+                else
+                    {
+                    cerr << "Encrpyted assertion not decrypted." << endl;
+                    }
+                }
+            catch ( exception& ex )
+                {
+                cerr << "Failed to decrypt assertion: " << ex.what() << endl;
+                }
+            }
+       }
+
+    return retval;
+    }
+
 extern "C" int verifySAMLResponse(const char* saml, int len, char* username) 
 {
     int retbool = 1;
@@ -502,7 +568,9 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                     if (XMLString::equals(q.getNamespaceURI(), samlconstants::SAML20P_NS)) {
                                         try {
                                             const saml2::RootObject& samlRoot = dynamic_cast<const saml2::RootObject&>(*response);
-                                            const vector<saml2::Assertion*>& assertions = dynamic_cast<const Response&>(samlRoot).getAssertions();
+                                            const vector<saml2::Assertion*> assertions =
+                                                extractAssertions(dynamic_cast<const Response&>(samlRoot), *app, policy);
+
                                             policy.setMessageID(samlRoot.getID());
                                             policy.setIssueInstant(samlRoot.getIssueInstantEpoch());
 
@@ -594,11 +662,13 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                                                 }
                                                             }
                                                         } else {
+                                                            cerr << "no assertions found" << endl;
                                                             retbool = 0;
                                                         }
                                                     }
                                                 }
                                             }
+                                            for_each(assertions.begin(), assertions.end(), xmltooling::cleanup<saml2::Assertion>());
                                         } catch (bad_cast&) {
                                             cerr << "caught a bad_cast while extracting message details" << endl;
                                         }
