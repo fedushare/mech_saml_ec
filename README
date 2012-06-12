@@ -157,17 +157,32 @@ Testing Library with MIT GSS example programs:
 Using ProtectNetwork's IdP:
 
 If you don't have an ECP-enabled IdP already, one option is to use
-ProtectNetwork. First, register for a ProtectNetwork UserID:
+ProtectNetwork.
 
-https://www.protectnetwork.org/pnidm/registration.html
-
-Then federate your SP with the ProtectNetwork IdP:
+First, federate your SP with the ProtectNetwork IdP:
 
 http://www.protectnetwork.org/support/integrate-protectnetwork-metadata/shibboleth-sp2x
 
 As documented on the above page, you must configure your SP with
 ProtectNetwork's metadata and register your SP with ProtectNetwork.
 
-Finally, you can use the ProtectNetwork IdP's ECP endpoint:
+To register your SP with ProtectNetwork, you must first apply for a
+ProtectNetwork Administrator account:
+
+https://www.protectnetwork.org/pnidm/adminRegistration.html
+
+Then use the 'Administrator Login' link:
+
+https://www.protectnetwork.org/pnidm/admin/login.jsp
+
+Then click the Add Site button to add a new SP and wait for approval.
+
+To actually log in via SAML ECP, you need to register for a
+ProtectNetwork UserID:
+
+https://www.protectnetwork.org/pnidm/registration.html
+
+Finally, you can use the ProtectNetwork IdP's ECP endpoint to log in
+with your ProtectNetwork UserID and password:
 
 export SAML_EC_IDP='https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP'
