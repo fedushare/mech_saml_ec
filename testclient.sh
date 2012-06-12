@@ -2,8 +2,8 @@
 
 host="localhost"
 port=3490
-saml_ec_idp='https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP'
-#saml_ec_idp='https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP'
+saml_ec_idp='https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP'
+#saml_ec_idp='https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP'
 saml_ec_user_cert=''
 saml_ec_user_key=''
 
