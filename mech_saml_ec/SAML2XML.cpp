@@ -428,7 +428,8 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
     XMLToolingConfig::getConfig().log_config("DEBUG");
     Category& log = Category::getInstance(SHIBSP_LOGCAT".verifySAMLResponse");
 
-    fprintf(stderr,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",saml);
+    string samlstr(saml, len);
+    fprintf(stderr,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",samlstr.c_str());
 
     // Initialization code taken from resolvertest.cpp::main()
     SPConfig& conf = getConf();
@@ -469,7 +470,6 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
 
                     // Taken from util/resolvertest.cpp and SAML2ECPDecoder::decode()
                     try {
-                        string samlstr(saml);
                         istringstream samlstream(samlstr);
                        
                         // Taken from SAML2ECPDecoder::decode()
