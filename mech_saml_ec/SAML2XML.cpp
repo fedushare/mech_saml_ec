@@ -486,6 +486,66 @@ static vector<saml2::Assertion*> extractAssertions(const Response& resp,
     return retval;
     }
 
+// Filters a set of SAML2 assertions based on presence of a valid signature.
+// The 'assertions' argument is modified in place to discard any invalidly
+// signed signatures, which are then placed in the return vector.  A given
+// assertion is valid only if all XMLSigningRule's in the 'policy' argument
+// evaluate to true for it.  If the policy doesn't have any such rules,
+// all assertions are considered invalid.
+static vector<saml2::Assertion*> filterValidSignedAssertions(
+    vector<saml2::Assertion*>& assertions, SecurityPolicy& policy)
+    {
+    vector<saml2::Assertion*> valid;
+    vector<saml2::Assertion*> invalid;
+    vector<const SecurityPolicyRule*> xml_rules;
+
+    for ( size_t i = 0; i < policy.getRules().size(); ++i )
+        if ( ! strcmp(policy.getRules()[i]->getType(), XMLSIGNING_POLICY_RULE) )
+            xml_rules.push_back(policy.getRules()[i]);
+
+    if ( xml_rules.empty() )
+        {
+        invalid = assertions;
+        assertions.clear();
+        cerr << "No XMLSigningRule's, all assertions deemed invalid" << endl;
+        return invalid;
+        }
+
+    for ( size_t i = 0; i < assertions.size(); ++i )
+        {
+        bool is_valid = true;
+
+        for ( size_t j = 0; j < xml_rules.size(); ++j )
+            {
+            try
+                {
+                is_valid = xml_rules[j]->evaluate(*(assertions[i]), 0, policy);
+                }
+            catch ( exception& e )
+                {
+                is_valid = false;
+                cerr << "Assertion signature failed verification: "
+                     << e.what() << endl;
+                }
+            if ( ! is_valid ) break;
+            }
+
+        if ( is_valid )
+            {
+            cerr << "Signature on assertion verified" << endl;
+            valid.push_back(assertions[i]);
+            }
+        else
+            {
+            cerr << "Filtered invalidly signed assertion" << endl;
+            invalid.push_back(assertions[i]);
+            }
+        }
+
+    assertions = valid;
+    return invalid;
+    }
+
 extern "C" int verifySAMLResponse(const char* saml, int len, char* username) 
 {
     int retbool = 1;
@@ -568,7 +628,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                     if (XMLString::equals(q.getNamespaceURI(), samlconstants::SAML20P_NS)) {
                                         try {
                                             const saml2::RootObject& samlRoot = dynamic_cast<const saml2::RootObject&>(*response);
-                                            const vector<saml2::Assertion*> assertions =
+                                            vector<saml2::Assertion*> assertions =
                                                 extractAssertions(dynamic_cast<const Response&>(samlRoot), *app, policy);
 
                                             policy.setMessageID(samlRoot.getID());
@@ -629,6 +689,10 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                                         cerr << "Done!" << endl;
                                                     }
 
+                                                    vector<saml2::Assertion*> invalid_assertions =
+                                                        filterValidSignedAssertions(assertions, policy);
+                                                    for_each(invalid_assertions.begin(), invalid_assertions.end(), xmltooling::cleanup<saml2::Assertion>());
+
                                                     // Attempt to extract local-login-user attribute
                                                     // Taken from resolvertest.cpp
                                                     if (retbool) {
@@ -662,7 +726,7 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                                                 }
                                                             }
                                                         } else {
-                                                            cerr << "no assertions found" << endl;
+                                                            cerr << "no valid assertions available to inspect for attribute mapped to local-login-user" << endl;
                                                             retbool = 0;
                                                         }
                                                     }
@@ -676,60 +740,14 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
                                         retbool = 0;
                                     }
                                     // End SAML2MessageDecoder::extractMessageDetails(*response,...)
-                                  
-                                    // Next, call policy.evaluate(*response, &genericRequest);
-                                    /* void SecurityPolicy::evaluate(const XMLObject&,const GenericRequest*)
-                                     * {
-                                     *     for (vector<const SecurityPolicyRule*>::const_iterator i=m_rules.begin(); 
-                                     *          i!=m_rules.end(); 
-                                     *          ++i)
-                                     *         (*i)->evaluate(message,request,*this);
-                                     * }
-                                     * Here (*i)->evaluate() calls (e.g.) XMLSigningRule:evaluate(...)
-                                     * Each of which returns false if that evaluate() call does not apply to the message,
-                                     *                       true if the message was successfully evaluated by the rule,
-                                     *                       throw exception if rejected by rule. UGH!!!
-                                     * Unfortunately, m_rules is a private member, so can't get at it from here!
-                                     */
+
                                     if (retbool) {
                                         try {
-                                            // const XMLObject* responseobj = dynamic_cast<const XMLObject*>(response);
-vector<const SecurityPolicyRule*> m_rules = policy.getRules();
-for (vector<const SecurityPolicyRule*>::const_iterator i=m_rules.begin(); i!=m_rules.end(); ++i) {
-    cerr << "rule type = " << (*i)->getType() << endl;
-    if (strcmp(((*i)->getType()),"XMLSigning") == 0) {
-        cerr << "checking details of XMLSigning... ";
-        if (!policy.getIssuerMetadata()) {
-            cerr << "ignoring message, no issuer metadata supplied" << endl;
-        }
-
-        const SignatureTrustEngine* sigtrust;
-        if (!(sigtrust=dynamic_cast<const SignatureTrustEngine*>(policy.getTrustEngine()))) {
-            cerr << "ignoring message, no SignatureTrustEngine supplied" << endl;
-        }
-        
-        const SignableObject* signable = dynamic_cast<const SignableObject*>(response);
-        if (!signable) {
-            cerr << "ignoring message, cannot cast to SignableObject" << endl;
-        } else if (!signable->getSignature()) {
-            cerr << "ignoring message, no signature" << endl;
-        }
-        cerr << "Done!" << endl;
-
-        /*
-        DOMElement *elem = response->getDOM();
-        stringstream s;
-        s << *elem;
-        cerr << "-----" << endl << "s.str() = " << s.str() << endl << "-----" << endl;
-        */
-    }
-}
-
                                             policy.evaluate(*response);
                                             cerr << "Successfully called policy.evaluate(*response)" << endl;
                                         } catch (exception& ex) {
                                             retbool = 0;
-                                            cerr << "Caught exception on policy.evaluate(): " << ex.what() << endl;
+                                            cerr << "Caught exception evaluating SecurityPolicy on Response:"<< ex.what() << endl;
                                         }
                                     }
 
