@@ -743,8 +743,15 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
 
                                     if (retbool) {
                                         try {
-                                            policy.evaluate(*response);
-                                            cerr << "Successfully called policy.evaluate(*response)" << endl;
+                                            cerr << "Evaluating SecurityPolicy rules on Response" << endl;
+                                            for ( size_t i = 0; i < policy.getRules().size(); ++i )
+                                                {
+                                                string rule_type = policy.getRules()[i]->getType();
+                                                if ( policy.getRules()[i]->evaluate(*response, nullptr, policy) )
+                                                    cerr << "SecurityPolicyRule '" << rule_type << "' passed." << endl;
+                                                else
+                                                    cerr << "SecurityPolicyRule '" << rule_type << "' ignored." << endl;
+                                                }
                                         } catch (exception& ex) {
                                             retbool = 0;
                                             cerr << "Caught exception evaluating SecurityPolicy on Response:"<< ex.what() << endl;
