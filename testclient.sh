@@ -34,5 +34,5 @@ else
     fi
 fi
 
-LD_LIBRARY_PATH=/opt/moonshot/lib64 SAML_EC_IDP="$idp" SAML_EC_USER_CERT="$user_cert" SAML_EC_USER_KEY="$user_key" gss-sample/gss-client -nw -nx -nm -port $port -user "$username" -pass "$password" -mech "{ 1 3 6 1 4 1 11591 4 6 }" $host test testmessage
+SAML_EC_IDP="$idp" SAML_EC_USER_CERT="$user_cert" SAML_EC_USER_KEY="$user_key" gss-sample/gss-client -nw -nx -nm -port $port -user "$username" -pass "$password" -mech "{ 1 3 6 1 4 1 11591 4 6 }" $host test testmessage
 
