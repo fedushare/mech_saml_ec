@@ -57,12 +57,9 @@ AX_CHECK_WINDOWS
 AX_CHECK_KRB5
 AX_CHECK_OPENSAML
 AM_CONDITIONAL(OPENSAML, test "x_$check_opensaml_dir" != "x_no")
-
 AX_CHECK_SHIBRESOLVER
-AM_CONDITIONAL(SHIBRESOLVER, test "x_$check_shibresolver_dir" != "x_no")
-if test x_$found_shibresolver = x_yes; then
-  AX_CHECK_SHIBSP
-fi
+AM_CONDITIONAL(SHIBRESOLVER, test "x_$found_shibresolver" != "x_no")
+AX_CHECK_SHIBSP
 
 AC_CONFIG_FILES([Makefile mech_saml_ec/Makefile gss-sample/Makefile])
 AC_OUTPUT

@@ -52,8 +52,6 @@ gpgcheck=0' \
     liblog4shib-devel \
     libxml-security-c16 \
     libxml-security-c-devel \
-    libshibresolver1 \
-    libshibresolver-devel \
     libxmltooling5 \
     libxmltooling-devel \
     xmltooling-schemas \
@@ -123,7 +121,7 @@ ECP request successful!
 Building The Code:
 
 # ./autogen.sh
-# ./configure --with-opensaml=/opt/moonshot/ --with-shibresolver=/opt/moonshot/ --with-shibsp=/opt/moonshot/
+# ./configure --with-opensaml=/opt/moonshot/ --with-shibsp=/opt/moonshot/
 # make
 
 -------------------------------------

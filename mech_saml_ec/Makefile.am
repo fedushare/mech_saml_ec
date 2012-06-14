@@ -120,7 +120,8 @@ mech_saml_ec_la_SOURCES =    			\
 	util.h \
 	util_reauth.h \
 	util_saml.h \
-	util_shib.h
+	util_shib.h \
+	SAML2XML.cpp
 
 
 if GSSEAP_ENABLE_ACCEPTOR
@@ -142,8 +143,7 @@ mech_saml_ec_la_SOURCES += util_saml.cpp
 endif
 
 if SHIBRESOLVER
-mech_saml_ec_la_SOURCES += util_shib.cpp	\
-	SAML2XML.cpp
+mech_saml_ec_la_SOURCES += util_shib.cpp
 endif
 
 endif
