@@ -125,11 +125,10 @@ if test x_$check_shibresolver_dir != x_no; then
 if test x_$found_shibresolver != x_yes; then
    AC_MSG_WARN([
 ----------------------------------------------------------------------
-  Cannot find Shibboleth resolver libraries, building without
-  Shibboleth support.
-
-  Please install Shibboleth or specify installation directory with
-  --with-shibresolver=(dir).
+  Cannot find Shibboleth resolver libraries, building without.
+  The SAML EC mechanism doesn't require this, but if desired,
+  an installation directory can be specified with
+  --with-shibresolver=(dir) to aid in locating it.
 ----------------------------------------------------------------------
 ])
 else
