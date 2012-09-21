@@ -893,9 +893,6 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                 major = gssEapImportName(minor, &buf, GSS_C_NT_USER_NAME,
 					 GSS_C_NO_OID, &ctx->initiatorName);
             major = GSS_S_COMPLETE;
-	    /* OpenSSH requires these flags to be set, which doesn't
-	       seem right to me. -JAB */
-	    ctx->gssFlags |= GSS_C_MUTUAL_FLAG|GSS_C_INTEG_FLAG;
         } else {
             major = GSS_S_FAILURE;
             *minor = GSSEAP_PEER_AUTH_FAILURE;
