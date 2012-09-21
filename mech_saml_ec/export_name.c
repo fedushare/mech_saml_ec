@@ -55,7 +55,7 @@ gss_export_name(OM_uint32 *minor,
 #ifdef MECH_EAP
     major = gssEapExportName(minor, input_name, exported_name);
 #else
-    major = GSS_S_UNAVAILABLE;
+    major = gssEapExportName(minor, input_name, exported_name);
 #endif
 
     GSSEAP_MUTEX_UNLOCK(&input_name->mutex);
