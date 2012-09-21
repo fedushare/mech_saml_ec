@@ -38,17 +38,25 @@
 
 OM_uint32 GSSAPI_CALLCONV
 gssspi_authorize_localname(OM_uint32 *minor,
-                           const gss_name_t name GSSEAP_UNUSED,
-                           gss_const_buffer_t local_user GSSEAP_UNUSED,
-                           gss_const_OID local_nametype GSSEAP_UNUSED)
+                           const gss_name_t name,
+                           gss_const_buffer_t local_user,
+                           gss_const_OID local_nametype)
 {
-    /*
-     * The MIT mechglue will fallback to comparing names in the absence
-     * of a mechanism implementation of gss_userok. To avoid this and
-     * force the mechglue to use attribute-based authorization, always
-     * return access denied here.
-     */
-
     *minor = 0;
+
+    if ((name != NULL) &&
+	(name->username.value != NULL) &&
+	(local_user != NULL) &&
+	(local_user->value != NULL)) {
+
+      if ((name->username.length == local_user->length) &&
+	  !strncmp(name->username.value, local_user->value, local_user->length)) {
+
+	return GSS_S_COMPLETE;
+
+      }
+
+    }
+
     return GSS_S_UNAUTHORIZED;
 }
