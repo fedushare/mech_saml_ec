@@ -38,7 +38,7 @@
 #include "gssapiP_eap.h"
 
 char* getSAMLRequest2(void);
-int verifySAMLResponse(const char*,int,char*);
+int verifySAMLResponse(const char*,int,char**);
 
 #if MECH_EAP
 /*
@@ -880,12 +880,12 @@ gssEapAcceptSecContext(OM_uint32 *minor,
 
         // Allocate space for username string. MUST FREE LATER!!!
         // TODO: have verifySAMLResponse allocate for username
-        char* username = calloc(128,sizeof(char));
+        char* username = NULL;
         int result = verifySAMLResponse((char*)input_token->value,
                                         (int)input_token->length,
-                                        username);
+                                        &username);
 
-        if (result) {
+        if (result && username) {
             gss_buffer_desc buf = {0, NULL};
             fprintf(stdout,"Username = '%s'\n",username);
             major = makeStringBuffer(minor, username, &buf);

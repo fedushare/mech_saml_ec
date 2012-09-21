@@ -546,9 +546,9 @@ static vector<saml2::Assertion*> filterValidSignedAssertions(
     return invalid;
     }
 
-extern "C" int verifySAMLResponse(const char* saml, int len, char* username) 
+extern "C" int verifySAMLResponse(const char* saml, int len, char** username) 
 {
-    int retbool = 1;
+    int retbool = 1; // FIXME: Defaulting to successful verification is dangerous.
     string localLoginUser = "";
 
     XMLToolingConfig::getConfig().log_config("DEBUG");
@@ -820,7 +820,9 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char* username)
         conf.term();
     }
 
-    strcpy(username,localLoginUser.c_str());
+    if (!localLoginUser.empty()) {
+      *username = strdup(localLoginUser.c_str());
+    }
 
     return retbool;
 }
