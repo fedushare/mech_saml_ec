@@ -1213,10 +1213,12 @@ gssEapInitSecContext(OM_uint32 *minor,
      */
     if (cred != GSS_C_NO_CREDENTIAL)
         GSSEAP_MUTEX_LOCK(&cred->mutex);
+#if 0
     else {
         *minor = GSSEAP_BAD_CRED_OPTION;
         return GSS_S_NO_CRED;
     }
+#endif
 
     if (ctx->cred == GSS_C_NO_CREDENTIAL) {
         major = gssEapResolveInitiatorCred(minor, cred, target_name, &ctx->cred);
@@ -1260,7 +1262,11 @@ gssEapInitSecContext(OM_uint32 *minor,
         if (major == GSS_S_COMPLETE)
             major = GSS_S_CONTINUE_NEEDED;
     } else {
+      if (cred) {
         major = processSAMLRequest(minor, cred, input_token, output_token);
+      } else {
+        major = processSAMLRequest(minor, ctx->cred, input_token, output_token);
+      }
         if (major != GSS_S_COMPLETE) {
             fprintf(stderr, "ERROR: SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
             makeStringBuffer(&tmpMinor, SOAP_FAULT_MSG, output_token);
