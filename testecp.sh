@@ -12,11 +12,11 @@
 #userid="userid"
 userid=$LOGNAME
 
-# idphost = your idp hostname
-idphost="boingo.ncsa.uiuc.edu"
-
 # idpid = your idp entity id
-idpid="https://boingo.ncsa.uiuc.edu/shibboleth"
+idpid="urn:mace:incommon:idp.protectnetwork.org"
+
+# ecpurl = your idp's ECP URL
+ecpurl="https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP"
 
 # rpid = a valid SP entityId that is configured for ECP
 rpid="https://ec.ncsa.illinois.edu/shibboleth"
@@ -40,8 +40,7 @@ envelope='<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/" xmlns:
 
 # make the request
 
-URL="https://${idphost}/idp/profile/SAML2/SOAP/ECP"
-resp="`curl -k -s -d \"$envelope\" -u \"${userid}\" \"$URL\" `" 
+resp="`curl -k -s -d \"$envelope\" -u \"${userid}\" \"${ecpurl}\" `" 
 
 # examine what we got
 
@@ -54,7 +53,14 @@ echo "$resp" | grep -q "Fault>"
    exit 1
 }
 
-echo "$resp" | grep -q "Response"  
+echo "$resp" | grep -q "RequestUnsupported"
+[[ $? == 0 ]] && {
+   echo "ECP request failed: unsupported!"
+   echo "$resp"
+   exit 1
+}
+
+echo "$resp" | grep -q "status:Success"  
 [[ $? == 0 ]] && {
    echo "ECP request successful!"
    exit 0
