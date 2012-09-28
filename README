@@ -169,3 +169,45 @@ Finally, you can use the ProtectNetwork IdP's ECP endpoint to log in
 with your ProtectNetwork UserID and password:
 
 export SAML_EC_IDP='https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP'
+
+-------------------------------------
+
+Using with OpenSSH for User Authentication:
+
+Download and install latest krb5 (>= 1.10) from http://web.mit.edu/kerberos/
+
+  cd krb5-1.10.3/src
+  CFLAGS=-g ./configure --prefix=$HOME/krb5-install --enable-shared
+  make
+  make install
+
+Download and install Project Moonshot OpenSSH modified for SAML EC
+
+  git clone git@github.com:jbasney/moonshot-openssh.git
+  cd moonshot-openssh/
+  ./configure --prefix=$HOME/openssh-moonshot --with-kerberos5=$HOME/krb5-install
+  make install
+
+  NOTE: If krb5 version is too old, compiler errors would look like:
+
+      undefined reference to `gss_pname_to_uid'
+      undefined reference to `gss_userok'
+
+Place the following in /etc/gss/mech :
+saml-ec 1.3.6.1.4.1.11591.4.6 mech_saml_ec.so
+
+Put your username/password with the IdP in ~/.gss_eap_id, like:
+username
+password
+
+Run Server as root:
+
+  # cd openssh-moonshot/sbin
+  # ./sshd -p 2222 -ddd -r
+
+Run Client:
+
+  $ # First set IdP as shown next
+  $ export SAML_EC_IDP=https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP
+  $ cd openssh-moonshot/bin
+  $ ./ssh -vvv -p 2222 localhost
