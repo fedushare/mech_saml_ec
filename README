@@ -181,6 +181,15 @@ Download and install latest krb5 (>= 1.10) from http://web.mit.edu/kerberos/
   make
   make install
 
+Place the following in $HOME/krb5-install/etc/gss/mech :
+saml-ec 1.3.6.1.4.1.11591.4.6 mech_saml_ec.so
+
+Place mech_saml_ec.so in $HOME/krb5-install/lib/gss/
+
+Place the following in $HOME/krb5-install/etc/krb5.conf :
+[libdefaults]
+    default_realm = YOUR_DOMAIN_ALL_CAPS
+
 Download and install Project Moonshot OpenSSH modified for SAML EC
 
   git clone git@github.com:jbasney/moonshot-openssh.git
@@ -192,9 +201,6 @@ Download and install Project Moonshot OpenSSH modified for SAML EC
 
       undefined reference to `gss_pname_to_uid'
       undefined reference to `gss_userok'
-
-Place the following in /etc/gss/mech :
-saml-ec 1.3.6.1.4.1.11591.4.6 mech_saml_ec.so
 
 Put your username/password with the IdP in ~/.gss_eap_id, like:
 username
