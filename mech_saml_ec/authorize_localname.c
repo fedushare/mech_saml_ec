@@ -51,11 +51,27 @@ gssspi_authorize_localname(OM_uint32 *minor,
 
       if ((name->username.length == local_user->length) &&
 	  !strncmp(name->username.value, local_user->value, local_user->length)) {
+          if (MECH_SAML_EC_DEBUG) {
+              char *s_name = calloc(name->username.length+1, sizeof(char));
+              snprintf(s_name, name->username.length, "%s", (char*)name->username.value);
+              char *s_local_user = calloc(local_user->length+1, sizeof(char));
+              snprintf(s_local_user, local_user->length, "%s", (char*)local_user->value);
+              fprintf(stderr, "gssspi_authorize_localname: Success comparing "
+                      "LENGTHS(%d)(%d) NAMES(%s)(%s)\n", name->username.length,
+                      local_user->length, s_name, s_local_user);
+          }
 
 	return GSS_S_COMPLETE;
 
+      } else {
+          char *s_name = calloc(name->username.length+1, sizeof(char));
+          snprintf(s_name, name->username.length, "%s", (char*)name->username.value);
+          char *s_local_user = calloc(local_user->length+1, sizeof(char));
+          snprintf(s_local_user, local_user->length, "%s", (char*)local_user->value);
+          fprintf(stderr, "gssspi_authorize_localname: Failure comparing "
+                  "LENGTHS(%d)(%d) NAMES(%s)(%s)\n", name->username.length,
+                  local_user->length, s_name, s_local_user);
       }
-
     }
 
     return GSS_S_UNAUTHORIZED;

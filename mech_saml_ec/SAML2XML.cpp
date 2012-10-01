@@ -416,7 +416,8 @@ extern "C" char* getSAMLRequest2(void)
     }
 
     char* cstr = strdup(retstr.c_str());
-    fprintf(stderr,"--- GETSAMLREQUEST2() RETURNING XML: ---\n%s\n",cstr);
+    if (getenv("MECH_SAML_EC_DEBUG"))
+        fprintf(stdout,"--- GETSAMLREQUEST2() RETURNING XML: ---\n%s\n",cstr);
     return cstr; //  Must free() returned char*
 }
 
@@ -555,7 +556,8 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** username)
     Category& log = Category::getInstance(SHIBSP_LOGCAT".verifySAMLResponse");
 
     string samlstr(saml, len);
-    fprintf(stderr,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",samlstr.c_str());
+    if (getenv("MECH_SAML_EC_DEBUG"))
+        fprintf(stdout,"--- VERIFYSAMLRESPONSE() GOT XML: ---\n%s\n",samlstr.c_str());
 
     // Initialization code taken from resolvertest.cpp::main()
     SPConfig& conf = getConf();

@@ -113,6 +113,15 @@ Building The Code:
 
 -------------------------------------
 
+Running in Debug Mode
+
+Copious debugging info can be seen by setting the environment variable
+MECH_SAML_EC_DEBUG.
+
+    $ export MECH_SAML_EC_DEBUG=anyvalue
+
+-------------------------------------
+
 Testing Library with MIT GSS example programs:
 
 1. Start Server as follows. In one window, run:

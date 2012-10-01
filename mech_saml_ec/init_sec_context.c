@@ -599,7 +599,8 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
     char userpw[514] = ""; /* TODO VSY: fix this */
     OM_uint32 major = GSS_S_COMPLETE;
 
-    fprintf(stdout, "USER IS (%s)\n", user?:"");
+    if (MECH_SAML_EC_DEBUG)
+        fprintf(stdout, "USER IS (%s)\n", user?:"");
 
     if ((certfile && !keyfile) || (keyfile && !certfile)) {
         fprintf(stderr, "NOTICE: One of either SAML_EC_USER_CERT or "
@@ -616,11 +617,13 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
     }
 
     if (certfile && keyfile) {
-        fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Cert Auth cert"
+        if (MECH_SAML_EC_DEBUG)
+            fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Cert Auth cert"
                     " (%s) key (%s)\n", idp, certfile, keyfile);
     }
     if (user && password) {
-        fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Basic Auth user"
+        if (MECH_SAML_EC_DEBUG)
+            fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Basic Auth user"
                     " (%s)\n", idp, user);
         sprintf(userpw, "%s:%s", user, password);
     }
@@ -719,7 +722,8 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         major = GSS_S_FAILURE;
         goto cleanup;
     } else {
-        fprintf(stdout, "CONTENT TYPE FROM IDP IS: %s", content_type);
+        if (MECH_SAML_EC_DEBUG)
+            fprintf(stdout, "CONTENT TYPE FROM IDP IS: %s", content_type);
         if (!strcasestr(content_type, "xml")) {
             fprintf(stderr, "ERROR: IdP DID NOT SEND XML DOCUMENT BACK.\n");
             *minor = GSSEAP_BAD_USAGE;
@@ -754,19 +758,22 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
     OM_uint32 major = GSS_S_COMPLETE;
     OM_uint32 tmpMinor = 0;
 
-    fprintf(stdout, "IdP IS (%s)\n", idp?:"");
+    if (MECH_SAML_EC_DEBUG)
+        fprintf(stdout, "IdP IS (%s)\n", idp?:"");
 
     if (idp == NULL) {
         fprintf(stderr, "ERROR: NO IDP specified; please specify an IdP"
-                "using the environment variable (%s)\n", SAML_EC_IDP);
+                " using the environment variable (%s)\n", SAML_EC_IDP);
         *minor = GSSEAP_BAD_SERVICE_NAME;
         return GSS_S_FAILURE;
     }
 
     doc_from_sp = xmlReadMemory(request->value, request->length, "FROMSP", NULL, 0);
     if (doc_from_sp != NULL) {
-        fprintf(stdout, "\n\nREQUEST FROM SP AS SEEN BY XML:\n");
-        xmlDocDump(stdout, doc_from_sp);
+        if (MECH_SAML_EC_DEBUG) {
+            fprintf(stdout, "\n\nREQUEST FROM SP AS SEEN BY XML:\n");
+            xmlDocDump(stdout, doc_from_sp);
+        }
     } else {
         fprintf(stderr, "ERROR: Failure parsing document from SP\n");
         *minor = GSSEAP_BAD_CONTEXT_TOKEN;
@@ -782,8 +789,10 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
         goto cleanup;
     }
     xmlUnlinkNode(header_from_sp);
-    fprintf(stdout, "\nSENDING TO IDP:\n");
-    xmlDocDump(stdout, doc_from_sp);
+    if (MECH_SAML_EC_DEBUG) {
+        fprintf(stdout, "\nSENDING TO IDP:\n");
+        xmlDocDump(stdout, doc_from_sp);
+    }
 
     /* Send doc to IdP */
     /* TODO: Error checking here and elsewhere */
@@ -800,7 +809,8 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
         goto cleanup;
     }
 
-    fprintf(stdout, "\n\nRECEIVED FROM IDP:\n%s\n", (char *) response_from_idp.value);
+    if (MECH_SAML_EC_DEBUG)
+        fprintf(stdout, "\n\nRECEIVED FROM IDP:\n%s\n", (char *) response_from_idp.value);
 
     /* Empty the header from IdP and populate with RelayState from
      *     header received from SP */
@@ -819,8 +829,10 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
         char *responseConsumerURL = NULL;
         char *AssertionConsumerServiceURL = NULL;
 
-        fprintf(stdout, "AS SEEN BY XML:\n");
-        xmlDocDump(stdout, doc_from_idp);
+        if (MECH_SAML_EC_DEBUG) {
+            fprintf(stdout, "AS SEEN BY XML:\n");
+            xmlDocDump(stdout, doc_from_idp);
+        }
 
         /* Compare responseConsumerURL from original request with
          * AssertionConsumerServiceURL from response from IdP */
@@ -863,7 +875,7 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
             *minor = GSSEAP_PEER_AUTH_FAILURE;
             major = GSS_S_FAILURE;
             goto cleanup;
-        } else
+        } else if (MECH_SAML_EC_DEBUG)
             fprintf(stdout, "NOTE: responseConsumerURL (%s) and "
                     "AssertionConsumerServiceURL (%s) match\n",
                     responseConsumerURL, AssertionConsumerServiceURL);
@@ -892,8 +904,10 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
             goto cleanup;
         }
 
-        fprintf(stdout, "SENDING TO SP >>>>>>>>>>>>>>>>>>>\n");
-        xmlDocDump(stdout, doc_from_idp);
+        if (MECH_SAML_EC_DEBUG) {
+            fprintf(stdout, "SENDING TO SP >>>>>>>>>>>>>>>>>>>\n");
+            xmlDocDump(stdout, doc_from_idp);
+        }
 
         xmlDocDumpMemory(doc_from_idp, (char *)&response->value,
                   (int *)&response->length);
@@ -1364,7 +1378,7 @@ gss_init_sec_context(OM_uint32 *minor,
     if (GSS_ERROR(major))
         gssEapReleaseContext(&tmpMinor, context_handle);
 #ifndef MECH_EAP
-    else
+    else if (MECH_SAML_EC_DEBUG)
         printBuffer(output_token);
 #endif
 
