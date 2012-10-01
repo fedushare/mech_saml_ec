@@ -217,3 +217,10 @@ Run Client:
   $ export SAML_EC_IDP=https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP
   $ cd openssh-moonshot/bin
   $ ./ssh -vvv -p 2222 localhost
+
+-------------------------------------
+
+Acknowledgements:
+
+Development of this software was supported in part by a gift from the
+Internet Society (www.internetsociety.org).
