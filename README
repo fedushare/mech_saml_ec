@@ -206,6 +206,11 @@ Put your username/password with the IdP in ~/.gss_eap_id, like:
 username
 password
 
+Enable GSSAPI in openssh-moonshot/etc/sshd_config:
+
+  GSSAPIAuthentication yes
+  GSSAPIRequireMIC no
+
 Run Server as root:
 
   # cd openssh-moonshot/sbin
