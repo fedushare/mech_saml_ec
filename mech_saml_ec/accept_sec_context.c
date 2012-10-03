@@ -143,7 +143,8 @@ eapGssSmAcceptVendorInfo(OM_uint32 *minor,
                          gss_buffer_t outputToken GSSEAP_UNUSED,
                          OM_uint32 *smFlags GSSEAP_UNUSED)
 {
-    fprintf(stderr, "GSS-EAP: vendor: %.*s\n",
+    if (MECH_SAML_EC_DEBUG)
+        fprintf(stderr, "GSS-EAP: vendor: %.*s\n",
             (int)inputToken->length, (char *)inputToken->value);
 
     *minor = 0;
@@ -211,7 +212,8 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 #else
     saml_req = getSAMLRequest2();
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
-    fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
+    if (MECH_SAML_EC_DEBUG)
+        fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
            (char *)outputToken->value);
     free(saml_req);
     saml_req = NULL;
@@ -871,7 +873,8 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                 major = GSS_S_FAILURE;
 
             if (!GSS_ERROR(major)) {
-                fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
+                if (MECH_SAML_EC_DEBUG)
+                    fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
                    (char *)output_token->value);
                 major = GSS_S_CONTINUE_NEEDED;
             }
@@ -887,7 +890,8 @@ gssEapAcceptSecContext(OM_uint32 *minor,
 
         if (result && username) {
             gss_buffer_desc buf = {0, NULL};
-            fprintf(stdout,"Username = '%s'\n",username);
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout,"Username = '%s'\n",username);
             major = makeStringBuffer(minor, username, &buf);
             if (major == GSS_S_COMPLETE)
                 major = gssEapImportName(minor, &buf, GSS_C_NT_USER_NAME,

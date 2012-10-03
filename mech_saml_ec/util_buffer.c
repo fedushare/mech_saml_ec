@@ -36,6 +36,8 @@
 
 #include "gssapiP_eap.h"
 
+int mech_saml_ec_debug = -1;
+
 OM_uint32
 makeStringBuffer(OM_uint32 *minor,
                  const char *string,

@@ -818,6 +818,13 @@ gssEapGetThreadLocalData(void);
 void
 gssEapDestroyStatusInfo(struct gss_eap_status_info *status);
 
+extern
+int mech_saml_ec_debug;
+
+#define MECH_SAML_EC_DEBUG ((mech_saml_ec_debug == -1)? \
+                            (mech_saml_ec_debug = (getenv("MECH_SAML_EC_DEBUG")?1:0)) : \
+                            (mech_saml_ec_debug))
+
 #ifdef __cplusplus
 }
 #endif

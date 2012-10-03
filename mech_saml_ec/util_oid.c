@@ -162,7 +162,8 @@ gss_str_to_oid(
      gss_OID *      output_oid)
 {
 #define MECH_SAML_EC_STRING "{ 1 3 6 1 4 1 11591 4 6 }"
-fprintf(stderr, "COMPARING (%s) and (%s)\n", input_string->value, MECH_SAML_EC_STRING);
+    if (MECH_SAML_EC_DEBUG)
+        fprintf(stdout, "COMPARING (%s) and (%s)\n", input_string->value, MECH_SAML_EC_STRING);
      if (!strncmp(input_string->value, MECH_SAML_EC_STRING, input_string->length
          && input_string->length == strlen(MECH_SAML_EC_STRING)))
      {
