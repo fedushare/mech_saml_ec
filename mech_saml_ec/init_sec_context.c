@@ -596,7 +596,6 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
     char *password = cred->password.value;
     char *certfile = getenv(SAML_EC_USER_CERT);
     char *keyfile = getenv(SAML_EC_USER_KEY);
-    char userpw[514] = ""; /* TODO VSY: fix this */
     OM_uint32 major = GSS_S_COMPLETE;
 
     if (MECH_SAML_EC_DEBUG)
@@ -625,7 +624,6 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         if (MECH_SAML_EC_DEBUG)
             fprintf(stdout, "DOING HTTPS POST to IdP (%s) using Basic Auth user"
                     " (%s)\n", idp, user);
-        sprintf(userpw, "%s:%s", user, password);
     }
     if (!user && !password && !certfile && !keyfile) {
         fprintf(stderr, "ERROR: NO user/password info in credential; "
@@ -661,7 +659,8 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L)) != CURLE_OK ||
         /* Per curl_easy_opt(3) this is for FTP but perhaps also for HTTP? */
         (res = curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL)) != CURLE_OK ||
-        (user && ((res = curl_easy_setopt(curl, CURLOPT_USERPWD, userpw)) != CURLE_OK ||
+        (user && ((res = curl_easy_setopt(curl, CURLOPT_USERNAME, user)) != CURLE_OK ||
+                  (res = curl_easy_setopt(curl, CURLOPT_PASSWORD, password)) != CURLE_OK ||
                   (res = curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC)) != CURLE_OK)) ||
         (certfile && ((res = curl_easy_setopt(curl, CURLOPT_SSLCERT, certfile)) != CURLE_OK ||
                       (res = curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, "PEM")) != CURLE_OK ||
@@ -1273,8 +1272,10 @@ gssEapInitSecContext(OM_uint32 *minor,
 
         major = gssEapMakeToken(minor, ctx, &innerToken, -1,
                    output_token);
-        if (major == GSS_S_COMPLETE)
+        if (major == GSS_S_COMPLETE) {
             major = GSS_S_CONTINUE_NEEDED;
+            ctx->state = GSSEAP_STATE_AUTHENTICATE;
+        }
     } else {
       if (cred) {
         major = processSAMLRequest(minor, cred, input_token, output_token);
@@ -1284,7 +1285,8 @@ gssEapInitSecContext(OM_uint32 *minor,
         if (major != GSS_S_COMPLETE) {
             fprintf(stderr, "ERROR: SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
             makeStringBuffer(&tmpMinor, SOAP_FAULT_MSG, output_token);
-        }
+        } else
+            ctx->state = GSSEAP_STATE_ESTABLISHED;
     }
 #endif
     if (GSS_ERROR(major))
@@ -1305,10 +1307,7 @@ gssEapInitSecContext(OM_uint32 *minor,
     if (time_rec != NULL)
         gssEapContextTime(&tmpMinor, ctx, time_rec);
 
-#ifdef MECH_EAP
-    /* TODO VSY: Do we need to care about maintaining ctx->state ? */
     GSSEAP_ASSERT(CTX_IS_ESTABLISHED(ctx) || major == GSS_S_CONTINUE_NEEDED);
-#endif
 
 cleanup:
     if (cred != GSS_C_NO_CREDENTIAL)

@@ -60,6 +60,9 @@ gssEapAllocContext(OM_uint32 *minor,
     ctx->state = GSSEAP_STATE_INITIAL;
     ctx->mechanismUsed = GSS_C_NO_OID;
 
+#ifndef MECH_EAP
+    ctx->gssFlags = 0;
+#else
     /*
      * Integrity, confidentiality, sequencing and replay detection are
      * always available.  Regardless of what flags are requested in
@@ -67,10 +70,6 @@ gssEapAllocContext(OM_uint32 *minor,
      * to these services in the output of GSS_Init_sec_context and
      * GSS_Accept_sec_context.
     */
-#ifndef MECH_EAP
-/* VSY: Review the following; should we really be setting this always? */
-    ctx->gssFlags = 0 /* GSS_C_MUTUAL_FLAG */;      /*  contexts */
-#else
     ctx->gssFlags = GSS_C_TRANS_FLAG    |   /* exporting contexts */
                     GSS_C_INTEG_FLAG    |   /* integrity */
                     GSS_C_CONF_FLAG     |   /* confidentiality */

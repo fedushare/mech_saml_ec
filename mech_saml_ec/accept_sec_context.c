@@ -40,7 +40,7 @@
 char* getSAMLRequest2(void);
 int verifySAMLResponse(const char*,int,char**);
 
-#if MECH_EAP
+#ifdef MECH_EAP
 /*
  * Mark an acceptor context as ready for cryptographic operations
  */
@@ -877,6 +877,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                     fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
                    (char *)output_token->value);
                 major = GSS_S_CONTINUE_NEEDED;
+                ctx->state = GSSEAP_STATE_AUTHENTICATE;
             }
         }
     } else {
@@ -897,6 +898,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                 major = gssEapImportName(minor, &buf, GSS_C_NT_USER_NAME,
 					 GSS_C_NO_OID, &ctx->initiatorName);
             major = GSS_S_COMPLETE;
+            ctx->state = GSSEAP_STATE_ESTABLISHED;
         } else {
             major = GSS_S_FAILURE;
             *minor = GSSEAP_PEER_AUTH_FAILURE;
@@ -936,10 +938,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         }
     }
 
-#ifdef MECH_EAP
-    /* TODO VSY: Do we need to care about maintaining ctx->state ? */
     GSSEAP_ASSERT(CTX_IS_ESTABLISHED(ctx) || major == GSS_S_CONTINUE_NEEDED);
-#endif
 
 cleanup:
     return major;

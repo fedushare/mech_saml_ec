@@ -62,8 +62,7 @@ gss_inquire_name(OM_uint32 *minor,
     if (attrs == NULL)
         return GSS_S_COMPLETE;
 
-#ifdef MECH_EAP
-/* VSY: gss-server can't handle unavailable attribute scenario well. */
+#ifdef MECH_EAP /* gss-server can't handle unavailable attribute scenario well. */
     GSSEAP_MUTEX_LOCK(&name->mutex);
 
     major = gssEapInquireName(minor, name, name_is_MN, MN_mech, attrs);

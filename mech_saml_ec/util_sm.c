@@ -347,8 +347,7 @@ gssEapSmStep(OM_uint32 *minor,
     }
 
     /* If the context is established, empty tokens only to be emitted by initiator */
-/* TODO VSY: See why this assertion is in place
-    GSSEAP_ASSERT(!CTX_IS_ESTABLISHED(ctx) || ((outputToken->length == 0) == CTX_IS_INITIATOR(ctx))); */
+    GSSEAP_ASSERT(!CTX_IS_ESTABLISHED(ctx) || ((outputToken->length == 0) == CTX_IS_INITIATOR(ctx)));
 
     SM_ASSERT_VALID(ctx, major);
 
