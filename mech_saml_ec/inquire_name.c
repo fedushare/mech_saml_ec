@@ -68,6 +68,8 @@ gss_inquire_name(OM_uint32 *minor,
     major = gssEapInquireName(minor, name, name_is_MN, MN_mech, attrs);
 
     GSSEAP_MUTEX_UNLOCK(&name->mutex);
+#else
+    major = GSS_S_COMPLETE;
 #endif
 
     if (GSS_ERROR(major))

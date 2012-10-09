@@ -43,7 +43,7 @@ gss_inquire_saslname_for_mech(OM_uint32 *minor,
                               gss_buffer_t mech_name,
                               gss_buffer_t mech_description)
 {
-    OM_uint32 major;
+    OM_uint32 major = GSS_S_COMPLETE;
     gss_buffer_t name;
 
     if (mech_description != GSS_C_NO_BUFFER) {

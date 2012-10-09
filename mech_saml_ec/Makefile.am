@@ -8,8 +8,8 @@ EXTRA_DIST = gsseap_err.et radsec_err.et \
 gssincludedir = $(includedir)/gssapi
 gssinclude_HEADERS = gssapi_eap.h
 
-SAMLEC_CFLAGS = -I/usr/include/libxml2
-# TODO VSY: handle libxml2 inclusion via config
+SAMLEC_CFLAGS = $(LIBXML_CFLAGS)
+SAMLEC_LIBS = $(LIBXML_LIBS) -lcurl
 
 
 if GSSEAP_ENABLE_ACCEPTOR
@@ -51,7 +51,7 @@ if TARGET_WINDOWS
 mech_saml_ec_la_LDFLAGS += -debug
 endif
 
-mech_saml_ec_la_LIBADD   = -lxml2 -lcurl \
+mech_saml_ec_la_LIBADD   = $(SAMLEC_LIBS) \
 		       @OPENSAML_LIBS@ @SHIBRESOLVER_LIBS@ @SHIBSP_LIBS@
 mech_saml_ec_la_SOURCES =    			\
 	acquire_cred.c				\
