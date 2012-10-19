@@ -326,15 +326,6 @@ tokenSize(const gss_OID_desc *mech, size_t body_size)
     body_size += 2 + (size_t) mech->length;         /* NEED overflow check */
 #endif
     return 1 + der_length_size(body_size) + body_size;
-#if 0
-    if (body_size) {
-        body_size += 4 + (size_t) mech->length;         /* NEED overflow check */
-        return der_length_size(body_size) + body_size;
-    } else {
-        body_size += 4 + (size_t) mech->length;         /* NEED overflow check */
-        return body_size;
-    }
-#endif
 }
 
 /* fills in a buffer with the token header.  The buffer is assumed to
