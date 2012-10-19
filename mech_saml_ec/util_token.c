@@ -319,11 +319,14 @@ tokenSize(const gss_OID_desc *mech, size_t body_size)
     GSSEAP_ASSERT(mech != GSS_C_NO_OID);
     GSSEAP_ASSERT(mech == GSS_SAMLEC_MECHANISM);
 
-#ifdef MECH_EAP
     /* set body_size to sequence contents size */
+#ifdef MECH_EAP
     body_size += 4 + (size_t) mech->length;         /* NEED overflow check */
+#else /* For MECH_SAML_EC, we don't need the 2 bytes for token type */
+    body_size += 2 + (size_t) mech->length;         /* NEED overflow check */
+#endif
     return 1 + der_length_size(body_size) + body_size;
-#else
+#if 0
     if (body_size) {
         body_size += 4 + (size_t) mech->length;         /* NEED overflow check */
         return der_length_size(body_size) + body_size;

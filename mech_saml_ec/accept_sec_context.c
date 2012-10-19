@@ -862,8 +862,13 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                                   &innerToken);
         if (!GSS_ERROR(major)) {
             GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
-            /* innerToken must be empty */
-            GSSEAP_ASSERT(innerToken.length == 0);
+
+        if (innerToken.length == strlen(MECH_SAML_EC_MUTUAL_AUTH) &&
+            strncmp(MECH_SAML_EC_MUTUAL_AUTH, innerToken.value, innerToken.length) == 0) {
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "NOTE: Mutual Authentication requested\n");
+            ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
+        }
 
             saml_req = getSAMLRequest2();
             if (saml_req != NULL) {

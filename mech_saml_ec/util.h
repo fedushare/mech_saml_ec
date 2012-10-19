@@ -825,6 +825,8 @@ int mech_saml_ec_debug;
                             (mech_saml_ec_debug = (getenv("MECH_SAML_EC_DEBUG")?1:0)) : \
                             (mech_saml_ec_debug))
 
+#define MECH_SAML_EC_MUTUAL_AUTH "urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp:2.0:WantAuthnRequestsSigned"
+
 #ifdef __cplusplus
 }
 #endif

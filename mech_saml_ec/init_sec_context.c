@@ -545,7 +545,7 @@ getElement(xmlNode *a_node, char *name)
     xmlNode *ret_node = NULL;
 
     for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
-            /* printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, cur_node->content?(cur_node->content):""); */
+            /* printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, (xmlNodeGetContent(cur_node))?:""); */
         if (cur_node->type == XML_ELEMENT_NODE && !strcmp(cur_node->name, name)) {
                 return cur_node;
         }
@@ -746,13 +746,15 @@ cleanup:
 }
 
 OM_uint32
-processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
+processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
                  gss_buffer_t request, gss_buffer_t response)
 {
     char *idp = getenv(SAML_EC_IDP);
     xmlDocPtr doc_from_sp = NULL;
     xmlDocPtr doc_from_idp = NULL;
     xmlNode *header_from_sp = NULL;
+    xmlNode *signature_value = NULL;
+    xmlNode *mutual_auth = NULL;
     gss_buffer_desc response_from_idp = {0, NULL};
     OM_uint32 major = GSS_S_COMPLETE;
     OM_uint32 tmpMinor = 0;
@@ -788,6 +790,20 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
         goto cleanup;
     }
     xmlUnlinkNode(header_from_sp);
+
+    /* VSY TODO: Should we be checking to make sure we have signature_value if GSS_C_MUTUAL_FLAG was requested? */
+    signature_value = getElement(xmlDocGetRootElement(doc_from_sp), "SignatureValue");
+/*
+if (signature_value != NULL) {
+xmlNodeSetContent(signature_value, "MZfJv3Eh9Rh5J46+IPoBP2KEmiAQH7UKVK0Jxm4uW87ZumVf1gbn13ggM+uGs++7"
+"oED7guIdH1LimQeE8A11VrqUb7VrJ0v3a4uZJmrFFZBCF/D3TIUa/z6RUjLNtwWz"
+"DKyNYAkMdtd9H0xvALsfc/JqN4/81LUPl8CmFNdq2aTfdVEgvbxB/UJ4fUWTJKNa"
+"iq5mWWyuwcL22eyn0erZqZDQdyRHpg0utPmK8LDtJsHTz8IMtJo0lu7N6LO5lkNk"
+"nN2/AWBQep3dA+UtVYBAi0rvX4JuHh+P23CVA5B/7erLHq1SyyiFebAHpeRSh0TJ"
+"JQLftg2F9EyDKZxygeRG0Q==");
+}
+*/
+
     if (MECH_SAML_EC_DEBUG) {
         fprintf(stdout, "\nSENDING TO IDP:\n");
         xmlDocDump(stdout, doc_from_sp);
@@ -795,7 +811,7 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
 
     /* Send doc to IdP */
     /* TODO: Error checking here and elsewhere */
-    major = sendToIdP(minor, doc_from_sp, idp, cred, &response_from_idp);
+    major = sendToIdP(minor, doc_from_sp, idp, ctx->cred, &response_from_idp);
     if (major != GSS_S_COMPLETE) {
         fprintf(stderr, "ERROR: Failure communicating with IdP\n");
         goto cleanup;
@@ -878,6 +894,20 @@ processSAMLRequest(OM_uint32 *minor, gss_cred_id_t cred,
             fprintf(stdout, "NOTE: responseConsumerURL (%s) and "
                     "AssertionConsumerServiceURL (%s) match\n",
                     responseConsumerURL, AssertionConsumerServiceURL);
+
+        mutual_auth = getElement(xmlDocGetRootElement(doc_from_idp), "RequestAuthenticated");
+        if (mutual_auth != NULL) {
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "NOTE: IdP has reported ecp:RequestAuthenticated\n");
+            ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
+        } else if (signature_value != NULL) {
+            /* VSY TODO: ecp:RequestAuthenticated not yet supported by most
+               IdPs, so assume mutual auth succeeded */
+            fprintf(stderr, "WARNING: IdP DID NOT REPORT ecp:RequestAuthenticated"
+                            " BUT STILL SETTING GSS_C_MUTUAL_FLAG ASSUMING "
+                            " IdP HAS NOT IMPLEMENTED ecp:RequestAuthenticated YET!!!\n");
+            ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
+        }
 
         header_from_idp = getElement(xmlDocGetRootElement(doc_from_idp), "Header");
         if (header_from_idp == NULL) {
@@ -1270,6 +1300,12 @@ gssEapInitSecContext(OM_uint32 *minor,
     if (initialContextToken) {
         gss_buffer_desc innerToken = GSS_C_EMPTY_BUFFER;
 
+        if (req_flags & GSS_C_MUTUAL_FLAG || 1 /* VSY TODO: for now do it always*/) {
+            major = makeStringBuffer(minor, MECH_SAML_EC_MUTUAL_AUTH, &innerToken);
+            if (major != GSS_S_COMPLETE)
+                goto cleanup;
+        }
+
         major = gssEapMakeToken(minor, ctx, &innerToken, -1,
                    output_token);
         if (major == GSS_S_COMPLETE) {
@@ -1277,11 +1313,7 @@ gssEapInitSecContext(OM_uint32 *minor,
             ctx->state = GSSEAP_STATE_AUTHENTICATE;
         }
     } else {
-      if (cred) {
-        major = processSAMLRequest(minor, cred, input_token, output_token);
-      } else {
-        major = processSAMLRequest(minor, ctx->cred, input_token, output_token);
-      }
+        major = processSAMLRequest(minor, ctx, input_token, output_token);
         if (major != GSS_S_COMPLETE) {
             fprintf(stderr, "ERROR: SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
             makeStringBuffer(&tmpMinor, SOAP_FAULT_MSG, output_token);
