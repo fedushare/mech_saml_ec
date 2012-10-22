@@ -791,17 +791,12 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
     }
     xmlUnlinkNode(header_from_sp);
 
-    /* VSY TODO: Should we be checking to make sure we have signature_value if GSS_C_MUTUAL_FLAG was requested? */
     signature_value = getElement(xmlDocGetRootElement(doc_from_sp), "SignatureValue");
-/*
+/* Corrupt the signature for testing purposes 
 if (signature_value != NULL) {
-xmlNodeSetContent(signature_value, "MZfJv3Eh9Rh5J46+IPoBP2KEmiAQH7UKVK0Jxm4uW87ZumVf1gbn13ggM+uGs++7"
-"oED7guIdH1LimQeE8A11VrqUb7VrJ0v3a4uZJmrFFZBCF/D3TIUa/z6RUjLNtwWz"
-"DKyNYAkMdtd9H0xvALsfc/JqN4/81LUPl8CmFNdq2aTfdVEgvbxB/UJ4fUWTJKNa"
-"iq5mWWyuwcL22eyn0erZqZDQdyRHpg0utPmK8LDtJsHTz8IMtJo0lu7N6LO5lkNk"
-"nN2/AWBQep3dA+UtVYBAi0rvX4JuHh+P23CVA5B/7erLHq1SyyiFebAHpeRSh0TJ"
-"JQLftg2F9EyDKZxygeRG0Q==");
-}
+xmlChar *val = xmlNodeGetContent(signature_value);
+val[0] = 'M';
+xmlNodeSetContent(signature_value, val);
 */
 
     if (MECH_SAML_EC_DEBUG) {
@@ -1300,8 +1295,12 @@ gssEapInitSecContext(OM_uint32 *minor,
     if (initialContextToken) {
         gss_buffer_desc innerToken = GSS_C_EMPTY_BUFFER;
 
-        if (req_flags & GSS_C_MUTUAL_FLAG || 1 /* VSY TODO: for now do it always*/) {
-            major = makeStringBuffer(minor, MECH_SAML_EC_MUTUAL_AUTH, &innerToken);
+        major = makeStringBuffer(minor, ",", &innerToken);
+        if (major != GSS_S_COMPLETE)
+            goto cleanup;
+
+        if (req_flags & GSS_C_MUTUAL_FLAG /* || 1  VSY TODO: for now do it always */ ) {
+            major = addToStringBuffer(minor, MECH_SAML_EC_MUTUAL_AUTH, strlen(MECH_SAML_EC_MUTUAL_AUTH), &innerToken);
             if (major != GSS_S_COMPLETE)
                 goto cleanup;
         }

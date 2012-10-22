@@ -860,30 +860,56 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         // This sets ctx->mechanismUsed
         major = gssEapVerifyToken(minor, ctx, input_token, NULL,
                                   &innerToken);
-        if (!GSS_ERROR(major)) {
-            GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
+        if (GSS_ERROR(major))
+            goto cleanup;
 
-        if (innerToken.length == strlen(MECH_SAML_EC_MUTUAL_AUTH) &&
-            strncmp(MECH_SAML_EC_MUTUAL_AUTH, innerToken.value, innerToken.length) == 0) {
+        GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
+
+        /* Format of innerToken: [hok],[mutual-auth] */
+
+        /* VSY TODO: hok has yet to be implemented */
+
+        /* should see comma now */
+        if (innerToken.length <= 0 || ((char *)innerToken.value)[0] != ',') {
+            fprintf(stderr, "ERROR: unexpected token content\n");
+            *minor = GSSEAP_WRONG_SIZE;
+            major = GSS_S_DEFECTIVE_TOKEN;
+            goto cleanup;
+        } else { /* skip comma */
+            innerToken.value++;
+            innerToken.length--;
+        }
+
+        if (innerToken.length >= strlen(MECH_SAML_EC_MUTUAL_AUTH) &&
+            strncmp(MECH_SAML_EC_MUTUAL_AUTH, innerToken.value,
+                          strlen(MECH_SAML_EC_MUTUAL_AUTH)) == 0) {
             if (MECH_SAML_EC_DEBUG)
                 fprintf(stdout, "NOTE: Mutual Authentication requested\n");
             ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
+            innerToken.value += strlen(MECH_SAML_EC_MUTUAL_AUTH);
+            innerToken.length -= strlen(MECH_SAML_EC_MUTUAL_AUTH);
         }
 
-            saml_req = getSAMLRequest2();
-            if (saml_req != NULL) {
-                major = makeStringBuffer(minor, saml_req?:"", output_token);
-                free(saml_req); saml_req = NULL;
-            } else
-                major = GSS_S_FAILURE;
+        if (innerToken.length) {
+            fprintf(stderr, "ERROR: unexpected token content\n");
+            *minor = GSSEAP_WRONG_SIZE;
+            major = GSS_S_DEFECTIVE_TOKEN;
+            goto cleanup;
+        }
 
-            if (!GSS_ERROR(major)) {
-                if (MECH_SAML_EC_DEBUG)
-                    fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
+        saml_req = getSAMLRequest2();
+        if (saml_req != NULL) {
+            major = makeStringBuffer(minor, saml_req?:"", output_token);
+            free(saml_req); saml_req = NULL;
+        } else
+            major = GSS_S_FAILURE;
+
+        if (!GSS_ERROR(major)) {
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
                    (char *)output_token->value);
                 major = GSS_S_CONTINUE_NEEDED;
                 ctx->state = GSSEAP_STATE_AUTHENTICATE;
-            }
         }
     } else {
 
