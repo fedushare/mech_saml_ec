@@ -160,7 +160,7 @@ private:
 };
 
 
-extern "C" char* getSAMLRequest2(void)
+extern "C" char* getSAMLRequest2(int signatureRequested)
 {
     string retstr = "";
 
@@ -298,7 +298,8 @@ extern "C" char* getSAMLRequest2(void)
                 pair<bool,const char*> keyName;
                 pair<bool,const XMLCh*> sigalg;
                 pair<bool,const XMLCh*> digalg;
-                if ((flag.first) && (!strcmp(flag.second,"true"))) {
+                if (((flag.first) && (!strcmp(flag.second,"true"))) ||
+                                   signatureRequested) {
                     CredentialResolver* credResolver = app->getCredentialResolver();
                     if (credResolver) {
                         Locker credLocker(credResolver);

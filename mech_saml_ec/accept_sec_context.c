@@ -37,7 +37,7 @@
 
 #include "gssapiP_eap.h"
 
-char* getSAMLRequest2(void);
+char* getSAMLRequest2(int);
 int verifySAMLResponse(const char*,int,char**);
 
 #ifdef MECH_EAP
@@ -210,7 +210,7 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 
     wpabuf_free(reqData);
 #else
-    saml_req = getSAMLRequest2();
+    saml_req = getSAMLRequest2(ctx->gssFlags & GSS_C_MUTUAL_FLAG);
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
     if (MECH_SAML_EC_DEBUG)
         fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
@@ -897,7 +897,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             goto cleanup;
         }
 
-        saml_req = getSAMLRequest2();
+        saml_req = getSAMLRequest2(ctx->gssFlags & GSS_C_MUTUAL_FLAG);
         if (saml_req != NULL) {
             major = makeStringBuffer(minor, saml_req?:"", output_token);
             free(saml_req); saml_req = NULL;

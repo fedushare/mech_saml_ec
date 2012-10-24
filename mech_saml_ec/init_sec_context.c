@@ -1299,7 +1299,7 @@ gssEapInitSecContext(OM_uint32 *minor,
         if (major != GSS_S_COMPLETE)
             goto cleanup;
 
-        if (req_flags & GSS_C_MUTUAL_FLAG /* || 1  VSY TODO: for now do it always */ ) {
+        if (req_flags & GSS_C_MUTUAL_FLAG) {
             major = addToStringBuffer(minor, MECH_SAML_EC_MUTUAL_AUTH, strlen(MECH_SAML_EC_MUTUAL_AUTH), &innerToken);
             if (major != GSS_S_COMPLETE)
                 goto cleanup;
