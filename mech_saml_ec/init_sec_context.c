@@ -745,6 +745,9 @@ cleanup:
     return major;
 }
 
+xmlChar *mic_key = NULL;
+xmlChar *mic_algorithm = NULL;
+
 OM_uint32
 processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
                  gss_buffer_t request, gss_buffer_t response)
@@ -755,6 +758,9 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
     xmlNode *header_from_sp = NULL;
     xmlNode *signature_value = NULL;
     xmlNode *mutual_auth = NULL;
+    xmlNode *elem = NULL;
+    xmlNode *session_key = NULL;
+    xmlNode *gen_key = NULL;
     gss_buffer_desc response_from_idp = {0, NULL};
     OM_uint32 major = GSS_S_COMPLETE;
     OM_uint32 tmpMinor = 0;
@@ -904,6 +910,25 @@ xmlNodeSetContent(signature_value, val);
             ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
         }
 
+        /* TODO VSY: ADD A FAKE GneratedKey FOR TEST PURPOSES!!! */
+        if ((elem = getElement(xmlDocGetRootElement(doc_from_idp), "GeneratedKey")) == NULL) {
+            elem = getElement(xmlDocGetRootElement(doc_from_idp), "Response");
+            session_key = xmlNewNode(NULL, "SessionKey");
+            gen_key = xmlNewNode(NULL, "GeneratedKey");
+            xmlNodeSetContent(gen_key, "3w1wSBKUosRLsU69xGK7dg==");
+            xmlNewProp(gen_key, "Algorithm", "aes128-cts-hmac-sha1-96");
+            xmlAddChild(session_key, gen_key);
+            xmlAddNextSibling(elem, session_key);
+        }
+
+        if ((elem = getElement(xmlDocGetRootElement(doc_from_idp), "Advice")) != NULL &&
+            (elem = getElement(elem, "SessionKey")) != NULL &&
+            (elem = getElement(elem, "GeneratedKey")) != NULL) {
+            /* Get the Algorithm attribute */
+            mic_key = xmlNodeGetContent(elem);
+            mic_algorithm = xmlGetNoNsProp(elem, "Algorithm");
+        }
+
         header_from_idp = getElement(xmlDocGetRootElement(doc_from_idp), "Header");
         if (header_from_idp == NULL) {
             fprintf(stderr, "ERROR: No Header element in SAML Response from IdP\n");
@@ -912,7 +937,8 @@ xmlNodeSetContent(signature_value, val);
             goto cleanup;
         }
 
-        freeChildren(header_from_idp);
+        /* Leave existing content in place. */
+        /* freeChildren(header_from_idp); */
         relay_state = getElement(header_from_sp, "RelayState");
         if (relay_state == NULL) {
             fprintf(stderr, "ERROR: No RelayState element in SAML Request from SP\n");
