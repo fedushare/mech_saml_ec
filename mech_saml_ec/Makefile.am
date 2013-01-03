@@ -100,8 +100,10 @@ mech_saml_ec_la_SOURCES =    			\
 	unwrap_iov.c				\
 	util_buffer.c				\
 	util_context.c				\
+	util_cksum.c				\
 	util_cred.c				\
 	util_crypt.c				\
+	util_krb.c				\
 	util_mech.c				\
 	util_name.c				\
 	util_oid.c				\

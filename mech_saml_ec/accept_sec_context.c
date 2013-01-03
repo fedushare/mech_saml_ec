@@ -37,10 +37,14 @@
 
 #include "gssapiP_eap.h"
 
+#include <libxml/xmlreader.h>
+
 char* getSAMLRequest2(int);
 int verifySAMLResponse(const char*,int,char**);
 
-#ifdef MECH_EAP
+static xmlChar *gl_session_key = NULL;
+static xmlChar *gl_encryption_type = NULL;
+
 /*
  * Mark an acceptor context as ready for cryptographic operations
  */
@@ -48,9 +52,22 @@ static OM_uint32
 acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
 {
     OM_uint32 major, tmpMinor;
+#ifdef MECH_EAP
     VALUE_PAIR *vp;
     gss_buffer_desc nameBuf = GSS_C_EMPTY_BUFFER;
 
+
+    /* Cache encryption type derived from selected mechanism OID */
+    major = gssEapOidToEnctype(minor, ctx->mechanismUsed,
+                               &ctx->encryptionType);
+#else
+    /* Cache encryption type specified by IdP */
+    major = krbStringToEnctype(gl_encryption_type, &ctx->encryptionType);
+#endif
+    if (GSS_ERROR(major))
+        return major;
+
+#ifdef MECH_EAP
     gssEapReleaseName(&tmpMinor, &ctx->initiatorName);
 
     major = gssEapRadiusGetRawAvp(minor, ctx->acceptorCtx.vps,
@@ -77,6 +94,26 @@ acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
         return GSS_S_UNAVAILABLE;
     }
 
+    major = gssEapDeriveRfc3961Key(minor,
+                                   rs_avp_octets_value_const_ptr(vp),
+                                   rs_avp_length(vp),
+                                   ctx->encryptionType,
+                                   &ctx->rfc3961Key);
+#else
+    major = gssEapDeriveRfc3961Key(minor,
+                                   gl_session_key,
+                                   strlen(gl_session_key),
+                                   ctx->encryptionType,
+                                   &ctx->rfc3961Key);
+#endif
+    if (GSS_ERROR(major))
+        return major;
+
+    major = rfc3961ChecksumTypeForKey(minor, &ctx->rfc3961Key,
+                                       &ctx->checksumType);
+    if (GSS_ERROR(major))
+        return major;
+
     major = sequenceInit(minor,
                          &ctx->seqState, ctx->recvSeq,
                          ((ctx->gssFlags & GSS_C_REPLAY_FLAG) != 0),
@@ -84,6 +121,8 @@ acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
                          TRUE);
     if (GSS_ERROR(major))
         return major;
+
+#ifdef MECH_EAP
 
     major = gssEapCreateAttrContext(minor, cred, ctx,
                                     &ctx->initiatorName->attrCtx,
@@ -95,11 +134,11 @@ acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
         *minor = GSSEAP_CRED_EXPIRED;
         return GSS_S_CREDENTIALS_EXPIRED;
     }
+#endif
 
     *minor = 0;
     return GSS_S_COMPLETE;
 }
-#endif
 
 static OM_uint32
 eapGssSmAcceptAcceptorName(OM_uint32 *minor,
@@ -790,6 +829,27 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
 #endif
 };
 
+#ifndef MECH_EAP
+static xmlNode *
+getElement(xmlNode *a_node, char *name)
+{
+    xmlNode *cur_node = NULL;
+    xmlNode *ret_node = NULL;
+
+    for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
+            /* printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, (xmlNodeGetContent(cur_node))?:""); */
+        if (cur_node->type == XML_ELEMENT_NODE && !strcmp(cur_node->name, name)) {
+                return cur_node;
+        }
+
+        ret_node = getElement(cur_node->children, name);
+        if (ret_node)
+            return ret_node;
+    }
+    return NULL;
+}
+#endif
+
 OM_uint32
 gssEapAcceptSecContext(OM_uint32 *minor,
                        gss_ctx_id_t ctx,
@@ -920,16 +980,32 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                                         (int)input_token->length,
                                         &username);
 
-        if (result && username) {
-            gss_buffer_desc buf = {0, NULL};
-            if (MECH_SAML_EC_DEBUG)
-                fprintf(stdout,"Username = '%s'\n",username);
-            major = makeStringBuffer(minor, username, &buf);
-            if (major == GSS_S_COMPLETE)
-                major = gssEapImportName(minor, &buf, GSS_C_NT_USER_NAME,
+        if (result) {
+            xmlDocPtr doc_from_client = xmlReadMemory(input_token->value, input_token->length, "FROMCLIENT", NULL, 0);
+            xmlNode *elem = NULL;
+            xmlNode *session_key = NULL;
+            xmlNode *gen_key = NULL;
+
+            if (username) {
+                gss_buffer_desc buf = {0, NULL};
+                if (MECH_SAML_EC_DEBUG)
+                    fprintf(stdout,"Username = '%s'\n",username);
+                major = makeStringBuffer(minor, username, &buf);
+                if (major == GSS_S_COMPLETE)
+                    major = gssEapImportName(minor, &buf, GSS_C_NT_USER_NAME,
 					 GSS_C_NO_OID, &ctx->initiatorName);
-            major = GSS_S_COMPLETE;
-            ctx->state = GSSEAP_STATE_ESTABLISHED;
+                major = GSS_S_COMPLETE;
+                ctx->state = GSSEAP_STATE_ESTABLISHED;
+            }
+            if ((elem = getElement(xmlDocGetRootElement(doc_from_client), "Response")) != NULL &&
+                (session_key = getElement(elem, "SessionKey")) != NULL &&
+                (gen_key = getElement(elem, "GeneratedKey")) != NULL) {
+                /* Get the Algorithm attribute */
+                gl_session_key = xmlNodeGetContent(gen_key);
+                gl_encryption_type = xmlGetNoNsProp(session_key, "EncType");
+            }
+
+            major = acceptReadyEap(minor, ctx, cred);
         } else {
             major = GSS_S_FAILURE;
             *minor = GSSEAP_PEER_AUTH_FAILURE;

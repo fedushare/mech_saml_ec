@@ -55,6 +55,8 @@
 		"  </S:Body>" \
 		"</S:Envelope>"
 
+static xmlChar *gl_session_key = NULL;
+static xmlChar *gl_encryption_type = NULL;
 
 #ifdef MECH_EAP
 
@@ -303,6 +305,8 @@ peerConfigFree(OM_uint32 *minor,
     return GSS_S_COMPLETE;
 }
 
+#endif
+
 /*
  * Mark an initiator context as ready for cryptographic operations
  */
@@ -313,12 +317,22 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
     const unsigned char *key;
     size_t keyLength;
 
+#ifdef MECH_EAP
 #if 1
     /* XXX actually check for mutual auth */
     if (reqFlags & GSS_C_MUTUAL_FLAG)
         ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
 #endif
+    /* Cache encryption type derived from selected mechanism OID */
+    major = gssEapOidToEnctype(minor, ctx->mechanismUsed, &ctx->encryptionType);
+#else
+    /* Cache encryption type specified by IdP */
+    major = krbStringToEnctype(gl_encryption_type, &ctx->encryptionType);
+#endif
+    if (GSS_ERROR(major))
+        return major;
 
+#ifdef MECH_EAP
     if (!eap_key_available(ctx->initiatorCtx.eap)) {
         *minor = GSSEAP_KEY_UNAVAILABLE;
         return GSS_S_UNAVAILABLE;
@@ -330,6 +344,26 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
         *minor = GSSEAP_KEY_TOO_SHORT;
         return GSS_S_UNAVAILABLE;
     }
+
+    major = gssEapDeriveRfc3961Key(minor,
+                                   &key[EAP_EMSK_LEN / 2],
+                                   EAP_EMSK_LEN / 2,
+                                   ctx->encryptionType,
+                                   &ctx->rfc3961Key);
+#else
+    major = gssEapDeriveRfc3961Key(minor,
+                                   gl_session_key,
+                                   strlen(gl_session_key),
+                                   ctx->encryptionType,
+                                   &ctx->rfc3961Key);
+#endif
+    if (GSS_ERROR(major))
+        return major;
+
+    major = rfc3961ChecksumTypeForKey(minor, &ctx->rfc3961Key,
+                                      &ctx->checksumType);
+    if (GSS_ERROR(major))
+        return major;
 
     major = sequenceInit(minor,
                          &ctx->seqState,
@@ -343,7 +377,6 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
     *minor = 0;
     return GSS_S_COMPLETE;
 }
-#endif
 
 static OM_uint32
 initBegin(OM_uint32 *minor,
@@ -745,9 +778,6 @@ cleanup:
     return major;
 }
 
-xmlChar *mic_key = NULL;
-xmlChar *mic_algorithm = NULL;
-
 OM_uint32
 processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
                  gss_buffer_t request, gss_buffer_t response)
@@ -916,17 +946,17 @@ xmlNodeSetContent(signature_value, val);
             session_key = xmlNewNode(NULL, "SessionKey");
             gen_key = xmlNewNode(NULL, "GeneratedKey");
             xmlNodeSetContent(gen_key, "3w1wSBKUosRLsU69xGK7dg==");
-            xmlNewProp(gen_key, "Algorithm", "aes128-cts-hmac-sha1-96");
+            xmlNewProp(session_key, "EncType", "aes128-cts-hmac-sha1-96");
             xmlAddChild(session_key, gen_key);
             xmlAddNextSibling(elem, session_key);
         }
 
-        if ((elem = getElement(xmlDocGetRootElement(doc_from_idp), "Advice")) != NULL &&
-            (elem = getElement(elem, "SessionKey")) != NULL &&
-            (elem = getElement(elem, "GeneratedKey")) != NULL) {
+        if ((elem = getElement(xmlDocGetRootElement(doc_from_idp), "Response")) != NULL &&
+            (session_key = getElement(elem, "SessionKey")) != NULL &&
+            (gen_key = getElement(elem, "GeneratedKey")) != NULL) {
             /* Get the Algorithm attribute */
-            mic_key = xmlNodeGetContent(elem);
-            mic_algorithm = xmlGetNoNsProp(elem, "Algorithm");
+            gl_session_key = xmlNodeGetContent(gen_key);
+            gl_encryption_type = xmlGetNoNsProp(session_key, "EncType");
         }
 
         header_from_idp = getElement(xmlDocGetRootElement(doc_from_idp), "Header");
@@ -1020,7 +1050,7 @@ eapGssSmInitAuthenticate(OM_uint32 *minor,
 
         resp = eap_get_eapRespData(ctx->initiatorCtx.eap);
     } else if (ctx->flags & CTX_FLAG_EAP_SUCCESS) {
-        major = initReady(minor, ctx, reqFlags);
+        major = initReady(minor, ctx, req_flags);
         if (GSS_ERROR(major))
             goto cleanup;
 
@@ -1342,8 +1372,10 @@ gssEapInitSecContext(OM_uint32 *minor,
         if (major != GSS_S_COMPLETE) {
             fprintf(stderr, "ERROR: SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
             makeStringBuffer(&tmpMinor, SOAP_FAULT_MSG, output_token);
-        } else
+        } else {
             ctx->state = GSSEAP_STATE_ESTABLISHED;
+            major = initReady(minor, ctx, req_flags);
+        }
     }
 #endif
     if (GSS_ERROR(major))

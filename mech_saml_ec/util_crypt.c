@@ -83,6 +83,218 @@
 
 #include "gssapiP_eap.h"
 
+/*
+ * DCE_STYLE indicates actual RRC is EC + RRC
+ * EC is extra rotate count for DCE_STYLE, pad length otherwise
+ * RRC is rotate count.
+ */
+static krb5_error_code
+mapIov(krb5_context context, int dce_style, size_t ec, size_t rrc,
+#ifdef HAVE_HEIMDAL_VERSION
+       krb5_crypto crypto,
+#else
+       krb5_keyblock *crypto,
+#endif
+       gss_iov_buffer_desc *iov,
+       int iov_count, krb5_crypto_iov **pkiov,
+       size_t *pkiov_count)
+{
+    gss_iov_buffer_t header;
+    gss_iov_buffer_t trailer;
+    int i = 0, j;
+    size_t kiov_count;
+    krb5_crypto_iov *kiov;
+    size_t k5_headerlen = 0, k5_trailerlen = 0;
+    size_t gss_headerlen, gss_trailerlen;
+    krb5_error_code code;
+
+    *pkiov = NULL;
+    *pkiov_count = 0;
+
+    header = gssEapLocateIov(iov, iov_count, GSS_IOV_BUFFER_TYPE_HEADER);
+    GSSEAP_ASSERT(header != NULL);
+
+    trailer = gssEapLocateIov(iov, iov_count, GSS_IOV_BUFFER_TYPE_TRAILER);
+    GSSEAP_ASSERT(trailer == NULL || rrc == 0);
+
+    code = krbCryptoLength(context, crypto, KRB5_CRYPTO_TYPE_HEADER, &k5_headerlen);
+    if (code != 0)
+        return code;
+
+    code = krbCryptoLength(context, crypto, KRB5_CRYPTO_TYPE_TRAILER, &k5_trailerlen);
+    if (code != 0)
+        return code;
+
+    /* Check header and trailer sizes */
+    gss_headerlen = 16 /* GSS-Header */ + k5_headerlen; /* Kerb-Header */
+    gss_trailerlen = ec + 16 /* E(GSS-Header) */ + k5_trailerlen; /* Kerb-Trailer */
+
+    /* If we're caller without a trailer, we must rotate by trailer length */
+    if (trailer == NULL) {
+        size_t actual_rrc = rrc;
+
+        if (dce_style)
+            actual_rrc += ec; /* compensate for Windows bug */
+
+        if (actual_rrc != gss_trailerlen)
+            return KRB5_BAD_MSIZE;
+
+        gss_headerlen += gss_trailerlen;
+        gss_trailerlen = 0;
+    } else {
+        if (trailer->buffer.length != gss_trailerlen)
+            return KRB5_BAD_MSIZE;
+    }
+
+    if (header->buffer.length != gss_headerlen)
+        return KRB5_BAD_MSIZE;
+
+    kiov_count = 3 + iov_count;
+    kiov = (krb5_crypto_iov *)GSSEAP_MALLOC(kiov_count * sizeof(krb5_crypto_iov));
+    if (kiov == NULL)
+        return ENOMEM;
+
+    /*
+     * The krb5 header is located at the end of the GSS header.
+     */
+    kiov[i].flags = KRB5_CRYPTO_TYPE_HEADER;
+    kiov[i].data.length = k5_headerlen;
+    kiov[i].data.data = (char *)header->buffer.value + header->buffer.length - k5_headerlen;
+    i++;
+
+    for (j = 0; j < iov_count; j++) {
+        kiov[i].flags = gssEapMapCryptoFlag(iov[j].type);
+        if (kiov[i].flags == KRB5_CRYPTO_TYPE_EMPTY)
+            continue;
+
+        kiov[i].data.length = iov[j].buffer.length;
+        kiov[i].data.data = (char *)iov[j].buffer.value;
+        i++;
+    }
+
+    /*
+     * The EC and encrypted GSS header are placed in the trailer, which may
+     * be rotated directly after the plaintext header if no trailer buffer
+     * is provided.
+     */
+    kiov[i].flags = KRB5_CRYPTO_TYPE_DATA;
+    kiov[i].data.length = ec + 16; /* E(Header) */
+    if (trailer == NULL)
+        kiov[i].data.data = (char *)header->buffer.value + 16;
+    else
+        kiov[i].data.data = (char *)trailer->buffer.value;
+    i++;
+
+    /*
+     * The krb5 trailer is placed after the encrypted copy of the
+     * krb5 header (which may be in the GSS header or trailer).
+     */
+    kiov[i].flags = KRB5_CRYPTO_TYPE_TRAILER;
+    kiov[i].data.length = k5_trailerlen;
+    kiov[i].data.data = (char *)kiov[i - 1].data.data + ec + 16; /* E(Header) */
+    i++;
+
+    *pkiov = kiov;
+    *pkiov_count = i;
+
+    return 0;
+}
+
+int
+gssEapEncrypt(krb5_context context,
+              int dce_style,
+              size_t ec,
+              size_t rrc,
+#ifdef HAVE_HEIMDAL_VERSION
+              krb5_crypto crypto,
+#else
+              krb5_keyblock *crypto,
+#endif
+              int usage,
+              gss_iov_buffer_desc *iov,
+              int iov_count)
+{
+    krb5_error_code code;
+    size_t kiov_count;
+    krb5_crypto_iov *kiov = NULL;
+
+    code = mapIov(context, dce_style, ec, rrc, crypto,
+                  iov, iov_count, &kiov, &kiov_count);
+    if (code != 0)
+        goto cleanup;
+
+#ifdef HAVE_HEIMDAL_VERSION
+    code = krb5_encrypt_iov_ivec(context, crypto, usage, kiov, kiov_count, NULL);
+#else
+    code = krb5_c_encrypt_iov(context, crypto, usage, NULL, kiov, kiov_count);
+#endif
+    if (code != 0)
+        goto cleanup;
+
+cleanup:
+    if (kiov != NULL)
+        GSSEAP_FREE(kiov);
+
+    return code;
+}
+
+int
+gssEapDecrypt(krb5_context context,
+              int dce_style,
+              size_t ec,
+              size_t rrc,
+#ifdef HAVE_HEIMDAL_VERSION
+              krb5_crypto crypto,
+#else
+              krb5_keyblock *crypto,
+#endif
+              int usage,
+              gss_iov_buffer_desc *iov,
+              int iov_count)
+{
+    krb5_error_code code;
+    size_t kiov_count;
+    krb5_crypto_iov *kiov;
+
+    code = mapIov(context, dce_style, ec, rrc, crypto,
+                  iov, iov_count, &kiov, &kiov_count);
+    if (code != 0)
+        goto cleanup;
+
+#ifdef HAVE_HEIMDAL_VERSION
+    code = krb5_decrypt_iov_ivec(context, crypto, usage, kiov, kiov_count, NULL);
+#else
+    code = krb5_c_decrypt_iov(context, crypto, usage, NULL, kiov, kiov_count);
+#endif
+
+cleanup:
+    if (kiov != NULL)
+        GSSEAP_FREE(kiov);
+
+    return code;
+}
+
+int
+gssEapMapCryptoFlag(OM_uint32 type)
+{
+    int ktype;
+
+    switch (GSS_IOV_BUFFER_TYPE(type)) {
+    case GSS_IOV_BUFFER_TYPE_DATA:
+    case GSS_IOV_BUFFER_TYPE_PADDING:
+        ktype = KRB5_CRYPTO_TYPE_DATA;
+        break;
+    case GSS_IOV_BUFFER_TYPE_SIGN_ONLY:
+        ktype = KRB5_CRYPTO_TYPE_SIGN_ONLY;
+        break;
+    default:
+        ktype = KRB5_CRYPTO_TYPE_EMPTY;
+        break;
+    }
+
+    return ktype;
+}
+
 gss_iov_buffer_t
 gssEapLocateIov(gss_iov_buffer_desc *iov, int iov_count, OM_uint32 type)
 {
@@ -152,18 +364,18 @@ int
 gssEapIsIntegrityOnly(gss_iov_buffer_desc *iov, int iov_count)
 {
     int i;
-    int has_conf_data = 0;
+    krb5_boolean has_conf_data = FALSE;
 
     GSSEAP_ASSERT(iov != GSS_C_NO_IOV_BUFFER);
 
     for (i = 0; i < iov_count; i++) {
         if (GSS_IOV_BUFFER_TYPE(iov[i].type) == GSS_IOV_BUFFER_TYPE_DATA) {
-            has_conf_data = 1;
+            has_conf_data = TRUE;
             break;
         }
     }
 
-    return (has_conf_data == 0);
+    return (has_conf_data == FALSE);
 }
 
 int

@@ -61,7 +61,7 @@ gssEapAllocContext(OM_uint32 *minor,
     ctx->mechanismUsed = GSS_C_NO_OID;
 
 #ifndef MECH_EAP
-    ctx->gssFlags = 0;
+    ctx->gssFlags = GSS_C_INTEG_FLAG;
 #else
     /*
      * Integrity, confidentiality, sequencing and replay detection are
