@@ -45,10 +45,4 @@ gss_display_name(OM_uint32 *minor,
     /* Lock not required as long as attributes are not used */
     return gssEapDisplayName(minor, name, output_name_buffer,
                              output_name_type);
-#if 0
-#ifdef MECH_EAP
-#else
-    return GSS_S_UNAVAILABLE;
-#endif
-#endif
 }

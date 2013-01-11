@@ -570,26 +570,6 @@ eapGssSmInitIdentity(OM_uint32 *minor,
     return GSS_S_CONTINUE_NEEDED;
 }
 
-
-static xmlNode *
-getElement(xmlNode *a_node, char *name)
-{
-    xmlNode *cur_node = NULL;
-    xmlNode *ret_node = NULL;
-
-    for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
-            /* printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, (xmlNodeGetContent(cur_node))?:""); */
-        if (cur_node->type == XML_ELEMENT_NODE && !strcmp(cur_node->name, name)) {
-                return cur_node;
-        }
-
-        ret_node = getElement(cur_node->children, name);
-        if (ret_node)
-            return ret_node;
-    }
-    return NULL;
-}
-
 static void
 freeChildren(xmlNode *a_node)
 {
@@ -818,7 +798,7 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
     }
 
     /* Exclude header */
-    header_from_sp = getElement(xmlDocGetRootElement(doc_from_sp), "Header");
+    header_from_sp = getXmlElement(xmlDocGetRootElement(doc_from_sp), "Header", MECH_SAML_EC_SOAP11_NS);
     if (header_from_sp == NULL) {
         fprintf(stderr, "ERROR: No Header in SAML Request from SP\n");
         *minor = GSSEAP_BAD_TOK_HEADER;
@@ -827,7 +807,7 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
     }
     xmlUnlinkNode(header_from_sp);
 
-    signature_value = getElement(xmlDocGetRootElement(doc_from_sp), "SignatureValue");
+    signature_value = getXmlElement(xmlDocGetRootElement(doc_from_sp), "SignatureValue", MECH_SAML_EC_DS_NS);
 /* Corrupt the signature for testing purposes 
 if (signature_value != NULL) {
 xmlChar *val = xmlNodeGetContent(signature_value);
@@ -882,7 +862,7 @@ xmlNodeSetContent(signature_value, val);
 
         /* Compare responseConsumerURL from original request with
          * AssertionConsumerServiceURL from response from IdP */
-        request_from_sp = getElement(header_from_sp, "Request");
+        request_from_sp = getXmlElement(header_from_sp, "Request", MECH_SAML_EC_PAOS_NS);
         if (request_from_sp == NULL) {
             fprintf(stderr, "ERROR: No Request element in SAML Request Header from SP\n");
             *minor = GSSEAP_BAD_TOK_HEADER;
@@ -898,7 +878,7 @@ xmlNodeSetContent(signature_value, val);
             goto cleanup;
         }
 
-        response_from_idp = getElement(xmlDocGetRootElement(doc_from_idp), "Response");
+        response_from_idp = getXmlElement(xmlDocGetRootElement(doc_from_idp), "Response", MECH_SAML_EC_ECP_NS);
         if (response_from_idp == NULL) {
             fprintf(stderr, "ERROR: No Response element in SAML Response from IdP\n");
             *minor = GSSEAP_BAD_TOK_HEADER;
@@ -926,40 +906,48 @@ xmlNodeSetContent(signature_value, val);
                     "AssertionConsumerServiceURL (%s) match\n",
                     responseConsumerURL, AssertionConsumerServiceURL);
 
-        mutual_auth = getElement(xmlDocGetRootElement(doc_from_idp), "RequestAuthenticated");
+        mutual_auth = getXmlElement(xmlDocGetRootElement(doc_from_idp), "RequestAuthenticated", MECH_SAML_EC_ECP_NS);
         if (mutual_auth != NULL) {
             if (MECH_SAML_EC_DEBUG)
                 fprintf(stdout, "NOTE: IdP has reported ecp:RequestAuthenticated\n");
             ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
-        } else if (signature_value != NULL) {
+        } else if (signature_value != NULL) { // SP did send a signature across
             /* VSY TODO: ecp:RequestAuthenticated not yet supported by most
                IdPs, so assume mutual auth succeeded */
             fprintf(stderr, "WARNING: IdP DID NOT REPORT ecp:RequestAuthenticated"
-                            " BUT STILL SETTING GSS_C_MUTUAL_FLAG ASSUMING "
+                            " BUT SERVER DID SEND A SIGNATURE SO SETTING GSS_C_MUTUAL_FLAG ASSUMING "
                             " IdP HAS NOT IMPLEMENTED ecp:RequestAuthenticated YET!!!\n");
             ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
         }
 
-        /* TODO VSY: ADD A FAKE GneratedKey FOR TEST PURPOSES!!! */
-        if ((elem = getElement(xmlDocGetRootElement(doc_from_idp), "GeneratedKey")) == NULL) {
-            elem = getElement(xmlDocGetRootElement(doc_from_idp), "Response");
+        /* TODO VSY: DELETE THIS FAKE GeneratedKey ADDED FOR TEST PURPOSES!!! */
+        if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_idp), "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) == NULL) {
+            xmlNsPtr samlec_ns;
+            elem = getXmlElement(xmlDocGetRootElement(doc_from_idp), "Response", MECH_SAML_EC_ECP_NS);
             session_key = xmlNewNode(NULL, "SessionKey");
-            gen_key = xmlNewNode(NULL, "GeneratedKey");
+            // Assume this NS doesn't yet exist
+            samlec_ns = xmlNewNs(session_key, MECH_SAML_EC_SAMLEC_NS, "samlec");
+            gen_key = xmlNewNode(samlec_ns, "GeneratedKey");
             xmlNodeSetContent(gen_key, "3w1wSBKUosRLsU69xGK7dg==");
-            xmlNewProp(session_key, "EncType", "aes128-cts-hmac-sha1-96");
+            xmlNewNsProp(session_key, samlec_ns, "EncType", "aes128-cts-hmac-sha1-96");
             xmlAddChild(session_key, gen_key);
             xmlAddNextSibling(elem, session_key);
         }
 
-        if ((elem = getElement(xmlDocGetRootElement(doc_from_idp), "Response")) != NULL &&
-            (session_key = getElement(elem, "SessionKey")) != NULL &&
-            (gen_key = getElement(elem, "GeneratedKey")) != NULL) {
+        if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_idp), "Response", MECH_SAML_EC_ECP_NS)) != NULL &&
+            (session_key = getXmlElement(elem, "SessionKey", NULL)) != NULL &&
+            (gen_key = getXmlElement(elem, "GeneratedKey", NULL)) != NULL) {
             /* Get the Algorithm attribute */
             gl_session_key = xmlNodeGetContent(gen_key);
-            gl_encryption_type = xmlGetNoNsProp(session_key, "EncType");
+            gl_encryption_type = xmlGetNsProp(session_key, "EncType", MECH_SAML_EC_SAMLEC_NS);
+        } else { // RFC requires support for GSS_C_CONF_FLAG, GSS_C_INTEG_FLAG
+            fprintf(stderr, "ERROR: No Session Key in SAML Response from IdP\n");
+            *minor = GSSEAP_KEY_UNAVAILABLE;
+            major = GSS_S_FAILURE;
+            goto cleanup;
         }
 
-        header_from_idp = getElement(xmlDocGetRootElement(doc_from_idp), "Header");
+        header_from_idp = getXmlElement(xmlDocGetRootElement(doc_from_idp), "Header", MECH_SAML_EC_SOAP11_NS);
         if (header_from_idp == NULL) {
             fprintf(stderr, "ERROR: No Header element in SAML Response from IdP\n");
             *minor = GSSEAP_BAD_TOK_HEADER;
@@ -969,7 +957,7 @@ xmlNodeSetContent(signature_value, val);
 
         /* Leave existing content in place. */
         /* freeChildren(header_from_idp); */
-        relay_state = getElement(header_from_sp, "RelayState");
+        relay_state = getXmlElement(header_from_sp, "RelayState", MECH_SAML_EC_ECP_NS);
         if (relay_state == NULL) {
             fprintf(stderr, "ERROR: No RelayState element in SAML Request from SP\n");
             *minor = GSSEAP_BAD_TOK_HEADER;
@@ -1467,7 +1455,7 @@ gss_init_sec_context(OM_uint32 *minor,
         gssEapReleaseContext(&tmpMinor, context_handle);
 #ifndef MECH_EAP
     else if (MECH_SAML_EC_DEBUG)
-        printBuffer(output_token);
+        printBuffer(stdout, output_token);
 #endif
 
     return major;

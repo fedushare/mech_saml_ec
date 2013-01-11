@@ -52,6 +52,11 @@ gss_verify_mic(OM_uint32 *minor,
         return GSS_S_BAD_SIG;
     }
 
+    if (MECH_SAML_EC_DEBUG) {
+        fprintf(stdout, "MIC TOKEN TO VERIFY IS: \n");
+        printBuffer(stdout, message_token);
+    }
+
     *minor = 0;
 
     iov[0].type = GSS_IOV_BUFFER_TYPE_DATA;

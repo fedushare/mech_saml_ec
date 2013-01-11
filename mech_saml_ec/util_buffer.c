@@ -124,17 +124,17 @@ duplicateBuffer(OM_uint32 *minor,
 }
 
 void
-printBuffer(const gss_buffer_t src)
+printBuffer(FILE *stream, const gss_buffer_t src)
 {
     int i = 0;
 
     if (src == GSS_C_NO_BUFFER)
         return;
 
-    fprintf(stderr, "BYTES IN TOKEN ARE: (");
+    fprintf(stream, "BYTES IN TOKEN ARE: (");
     for (i = 0; i < src->length; i++)
     {
-        fprintf(stderr, "%x ", ((unsigned char *)src->value)[i]);
+        fprintf(stream, "%x ", ((unsigned char *)src->value)[i]);
     }
-    fprintf(stderr, ")\n");
+    fprintf(stream, ")\n");
 }

@@ -72,6 +72,10 @@
 
 #include <krb5.h>
 
+#ifndef MECH_EAP
+#include <libxml/xmlreader.h>
+#endif
+
 #ifdef WIN32
 #define inline __inline
 #define snprintf _snprintf
@@ -121,7 +125,7 @@ duplicateBuffer(OM_uint32 *minor,
                 gss_buffer_t dst);
 
 void
-printBuffer(const gss_buffer_t src);
+printBuffer(FILE *stream, const gss_buffer_t src);
 
 #define duplicateBufferOrCleanup(src, dst)              \
     do {                                                \
@@ -1039,6 +1043,18 @@ int mech_saml_ec_debug;
                             (mech_saml_ec_debug))
 
 #define MECH_SAML_EC_MUTUAL_AUTH "urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp:2.0:WantAuthnRequestsSigned"
+
+/* XML namespaces */
+#define MECH_SAML_EC_SOAP11_NS    "http://schemas.xmlsoap.org/soap/envelope/"
+#define MECH_SAML_EC_ECP_NS     "urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp"
+#define MECH_SAML_EC_DS_NS      "http://www.w3.org/2000/09/xmldsig#"
+#define MECH_SAML_EC_PAOS_NS    "urn:liberty:paos:2003-08"
+#define MECH_SAML_EC_ECP_NS     "urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp"
+#define MECH_SAML_EC_SAMLEC_NS  "urn:ietf:params:xml:ns:samlec"
+
+#ifndef MECH_EAP
+#include <libxml/xmlreader.h>
+#endif
 
 #ifdef __cplusplus
 }

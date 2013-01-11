@@ -829,27 +829,6 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
 #endif
 };
 
-#ifndef MECH_EAP
-static xmlNode *
-getElement(xmlNode *a_node, char *name)
-{
-    xmlNode *cur_node = NULL;
-    xmlNode *ret_node = NULL;
-
-    for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
-            /* printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, (xmlNodeGetContent(cur_node))?:""); */
-        if (cur_node->type == XML_ELEMENT_NODE && !strcmp(cur_node->name, name)) {
-                return cur_node;
-        }
-
-        ret_node = getElement(cur_node->children, name);
-        if (ret_node)
-            return ret_node;
-    }
-    return NULL;
-}
-#endif
-
 OM_uint32
 gssEapAcceptSecContext(OM_uint32 *minor,
                        gss_ctx_id_t ctx,
@@ -997,12 +976,12 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                 major = GSS_S_COMPLETE;
                 ctx->state = GSSEAP_STATE_ESTABLISHED;
             }
-            if ((elem = getElement(xmlDocGetRootElement(doc_from_client), "Response")) != NULL &&
-                (session_key = getElement(elem, "SessionKey")) != NULL &&
-                (gen_key = getElement(elem, "GeneratedKey")) != NULL) {
+            if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_client), "Response", MECH_SAML_EC_ECP_NS)) != NULL &&
+                (session_key = getXmlElement(elem, "SessionKey", NULL)) != NULL &&
+                (gen_key = getXmlElement(elem, "GeneratedKey", NULL)) != NULL) {
                 /* Get the Algorithm attribute */
                 gl_session_key = xmlNodeGetContent(gen_key);
-                gl_encryption_type = xmlGetNoNsProp(session_key, "EncType");
+                gl_encryption_type = xmlGetProp(session_key, "EncType");
             }
 
             major = acceptReadyEap(minor, ctx, cred);

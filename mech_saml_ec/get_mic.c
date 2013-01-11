@@ -82,11 +82,13 @@ gss_get_mic(OM_uint32 *minor,
 
     *message_token = iov[1].buffer;
 
+    if (MECH_SAML_EC_DEBUG) {
+        fprintf(stdout, "MIC TOKEN GENERATED IS: \n");
+        printBuffer(stdout, message_token);
+    }
+
 cleanup:
     GSSEAP_MUTEX_UNLOCK(&ctx->mutex);
 
     return major;
-#ifdef MECH_EAP
-    return GSS_S_UNAVAILABLE;
-#endif
 }

@@ -498,3 +498,27 @@ gssEapReleaseInnerTokens(OM_uint32 *minor,
     *minor = 0;
     return GSS_S_COMPLETE;
 }
+
+#ifndef MECH_EAP
+#include <libxml/xmlreader.h>
+xmlNode *
+getXmlElement(xmlNode *a_node, char *name, char *ns)
+{
+    xmlNode *cur_node = NULL;
+    xmlNode *ret_node = NULL;
+
+    for (cur_node = a_node; cur_node; cur_node = cur_node->next) {
+            /* printf("node type: %d, name: %s (%s)\n", cur_node->type, cur_node->name, (xmlNodeGetContent(cur_node))?:""); */
+        if (cur_node->type == XML_ELEMENT_NODE &&
+            !strcmp(cur_node->name, name) &&
+            (!ns || (cur_node->ns && !strcmp(cur_node->ns->href, ns)))) {
+                return cur_node;
+        }
+
+        ret_node = getXmlElement(cur_node->children, name, ns);
+        if (ret_node)
+            return ret_node;
+    }
+    return NULL;
+}
+#endif
