@@ -88,6 +88,7 @@ mech_saml_ec_la_SOURCES =    			\
 	inquire_saslname_for_mech.c		\
 	inquire_sec_context_by_oid.c		\
 	process_context_token.c			\
+	pseudo_random.c				\
 	query_mechanism_info.c			\
 	query_meta_data.c			\
 	release_cred.c				\

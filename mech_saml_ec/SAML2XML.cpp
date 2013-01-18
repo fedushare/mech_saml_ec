@@ -269,6 +269,8 @@ extern "C" char* getSAMLRequest2(int signatureRequested)
                 prop = ACS->getString("Location");
                 if (prop.first) {
                     m_handlerURL += prop.second;
+                    // TODO: Delete the below once we can set this in conf file
+                    // m_handlerURL.assign("host@ec.ncsa.illinois.edu");
                 }
 
                 // auto_ptr_XMLCh acsLocation("https://test.cilogon.org/Shibboleth.sso/SAML2/ECP");

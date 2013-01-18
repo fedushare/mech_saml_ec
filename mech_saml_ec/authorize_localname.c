@@ -56,7 +56,7 @@ gssspi_authorize_localname(OM_uint32 *minor,
               snprintf(s_name, name->username.length, "%s", (char*)name->username.value);
               char *s_local_user = calloc(local_user->length+1, sizeof(char));
               snprintf(s_local_user, local_user->length, "%s", (char*)local_user->value);
-              fprintf(stderr, "gssspi_authorize_localname: Success comparing "
+              fprintf(stdout, "gssspi_authorize_localname: Success comparing "
                       "LENGTHS(%d)(%d) NAMES(%s)(%s)\n", name->username.length,
                       local_user->length, s_name, s_local_user);
           }

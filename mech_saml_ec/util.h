@@ -1045,7 +1045,7 @@ int mech_saml_ec_debug;
 #define MECH_SAML_EC_MUTUAL_AUTH "urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp:2.0:WantAuthnRequestsSigned"
 
 /* XML namespaces */
-#define MECH_SAML_EC_SOAP11_NS    "http://schemas.xmlsoap.org/soap/envelope/"
+#define MECH_SAML_EC_SOAP11_NS  "http://schemas.xmlsoap.org/soap/envelope/"
 #define MECH_SAML_EC_ECP_NS     "urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp"
 #define MECH_SAML_EC_DS_NS      "http://www.w3.org/2000/09/xmldsig#"
 #define MECH_SAML_EC_PAOS_NS    "urn:liberty:paos:2003-08"

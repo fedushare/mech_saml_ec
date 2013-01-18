@@ -374,6 +374,10 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
     if (GSS_ERROR(major))
         return major;
 
+#ifndef MECH_EAP
+    ctx->gssFlags |= GSS_C_PROT_READY_FLAG;
+#endif
+
     *minor = 0;
     return GSS_S_COMPLETE;
 }
@@ -416,6 +420,9 @@ initBegin(OM_uint32 *minor,
             GSSEAP_MUTEX_UNLOCK(&target->mutex);
             return major;
         }
+        if (MECH_SAML_EC_DEBUG)
+            fprintf(stdout, "TARGET NAME IS (%.*s)\n",
+                    target->username.length,  (char *)(target->username.value));
 
         GSSEAP_MUTEX_UNLOCK(&target->mutex);
     }
@@ -905,6 +912,26 @@ xmlNodeSetContent(signature_value, val);
             fprintf(stdout, "NOTE: responseConsumerURL (%s) and "
                     "AssertionConsumerServiceURL (%s) match\n",
                     responseConsumerURL, AssertionConsumerServiceURL);
+
+        /* VSY TODO: ENABLE THIS CHECK ONCE IT IS SUPPORTED ON IDPs */
+#if 0
+        if(strlen(AssertionConsumerServiceURL) != ctx->acceptorName->username.length
+           ||
+           strncmp(AssertionConsumerServiceURL, ctx->acceptorName->username.value,
+                   ctx->acceptorName->username.length)) {
+            fprintf(stderr, "ERROR: Target name (%.*s) and "
+                    "AssertionConsumerServiceURL (%s) do not match\n",
+                    ctx->acceptorName->username.length,
+                    ctx->acceptorName->username.value, AssertionConsumerServiceURL);
+            *minor = GSSEAP_PEER_AUTH_FAILURE;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        } else if (MECH_SAML_EC_DEBUG)
+            fprintf(stdout, "NOTE: Target name (%.*s) and "
+                    "AssertionConsumerServiceURL (%s) match\n",
+                    ctx->acceptorName->username.length,
+                    ctx->acceptorName->username.value, AssertionConsumerServiceURL);
+#endif
 
         mutual_auth = getXmlElement(xmlDocGetRootElement(doc_from_idp), "RequestAuthenticated", MECH_SAML_EC_ECP_NS);
         if (mutual_auth != NULL) {

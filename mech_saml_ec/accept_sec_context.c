@@ -129,11 +129,17 @@ acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
                                     &ctx->expiryTime);
     if (GSS_ERROR(major))
         return major;
+#else
+    ctx->expiryTime = 0; /* indefinite */
+#endif
 
     if (ctx->expiryTime != 0 && ctx->expiryTime < time(NULL)) {
         *minor = GSSEAP_CRED_EXPIRED;
         return GSS_S_CREDENTIALS_EXPIRED;
     }
+
+#ifndef MECH_EAP
+    ctx->gssFlags |= GSS_C_PROT_READY_FLAG;
 #endif
 
     *minor = 0;
@@ -183,7 +189,7 @@ eapGssSmAcceptVendorInfo(OM_uint32 *minor,
                          OM_uint32 *smFlags GSSEAP_UNUSED)
 {
     if (MECH_SAML_EC_DEBUG)
-        fprintf(stderr, "GSS-EAP: vendor: %.*s\n",
+        fprintf(stdout, "GSS-EAP: vendor: %.*s\n",
             (int)inputToken->length, (char *)inputToken->value);
 
     *minor = 0;
@@ -952,8 +958,9 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         }
     } else {
 
-        // Allocate space for username string. MUST FREE LATER!!!
-        // TODO: have verifySAMLResponse allocate for username
+        // TODO: have verifySAMLResponse return any value found in
+        // SessionNotOnOrAfter in AuthnStatement and set ctx->expiryTime
+        // to that value.
         char* username = NULL;
         int result = verifySAMLResponse((char*)input_token->value,
                                         (int)input_token->length,
@@ -975,6 +982,11 @@ gssEapAcceptSecContext(OM_uint32 *minor,
 					 GSS_C_NO_OID, &ctx->initiatorName);
                 major = GSS_S_COMPLETE;
                 ctx->state = GSSEAP_STATE_ESTABLISHED;
+            } else {
+                fprintf(stderr, "ERROR: local-login-user not available\n");
+                major = GSS_S_BAD_NAME;
+                *minor = GSSEAP_BAD_INITIATOR_NAME;
+                goto cleanup;
             }
             if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_client), "Response", MECH_SAML_EC_ECP_NS)) != NULL &&
                 (session_key = getXmlElement(elem, "SessionKey", NULL)) != NULL &&
@@ -1016,6 +1028,10 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             major = gssEapDuplicateName(&tmpMinor, ctx->initiatorName, src_name);
             if (GSS_ERROR(major))
                 goto cleanup;
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "SOURCE NAME IS (%.*s)\n",
+                                   ctx->initiatorName->username.length,
+                                   (char *)(ctx->initiatorName->username.value));
         }
         if (time_rec != NULL) {
             major = gssEapContextTime(&tmpMinor, ctx, time_rec);

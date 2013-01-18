@@ -62,7 +62,9 @@ gssEapAllocContext(OM_uint32 *minor,
 
 #ifndef MECH_EAP
     ctx->gssFlags = GSS_C_INTEG_FLAG    |   /* integrity */
-                    GSS_C_CONF_FLAG;        /* confidentiality */
+                    GSS_C_CONF_FLAG     |   /* confidentiality */
+                    GSS_C_SEQUENCE_FLAG |   /* sequencing */
+                    GSS_C_REPLAY_FLAG;      /* replay detection */
 
 #else
     /*
