@@ -34,6 +34,7 @@
 #include <xmltooling/util/ParserPool.h>
 #include <xmltooling/util/XMLHelper.h>
 #include <xmltooling/util/XMLConstants.h>
+#include <xmltooling/util/DateTime.h>
 #include <xmltooling/validation/ValidatorSuite.h>
 #include <iostream>
 #include <sstream>
@@ -270,7 +271,14 @@ extern "C" char* getSAMLRequest2(int signatureRequested)
                 if (prop.first) {
                     m_handlerURL += prop.second;
                     // TODO: Delete the below once we can set this in conf file
-                    // m_handlerURL.assign("host@ec.ncsa.illinois.edu");
+                    // This is to enable the initiator (ssh client) to check
+                    // the target name passed in by the ssh client which is
+                    // of the form host@<hostname>
+                    {
+                        char hoststr[256] = "host@";
+                        gethostname(hoststr+strlen("host@"), sizeof(hoststr) - strlen("host@"));
+                        m_handlerURL.assign(hoststr);
+                    }
                 }
 
                 // auto_ptr_XMLCh acsLocation("https://test.cilogon.org/Shibboleth.sso/SAML2/ECP");
@@ -703,6 +711,19 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** username)
                                                     if (retbool) {
                                                         if (!assertions.empty()) {
                                                             saml2::Assertion* a2 = assertions.front();
+                                                            if (!a2->getAuthnStatements().empty()) {
+                                                                fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>AuthnStatements Present\n");
+                                                                // TODO VSY: check all assertions and go with the earliest SessionNotOnOrAfter
+                                                                saml2::AuthnStatement* authnst = a2->getAuthnStatements().front();
+                                                                if (authnst) {
+                                                                    DOMElement* authnElement = authnst->marshall();
+                                                                    stringstream s;
+                                                                    s << *authnElement;
+                                                                    fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>AuthnStatement is: %s\n", s.str().c_str());
+                                                                    if (authnst->getSessionNotOnOrAfter() != NULL)
+                                                                        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>getSessionNotOnOrAfter (%s)\n", xercesc::XMLString::transcode(authnst->getSessionNotOnOrAfter()->getFormattedString()));
+                                                                }
+                                                            }
                                                             const XMLCh* protocol = samlconstants::SAML20P_NS;
                                                             saml2::NameID* v2name = a2->getSubject()?a2->getSubject()->getNameID():nullptr;
                                                             vector<const opensaml::Assertion*> tokens;
