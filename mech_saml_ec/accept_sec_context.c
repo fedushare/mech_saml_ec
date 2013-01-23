@@ -39,7 +39,7 @@
 
 #include <libxml/xmlreader.h>
 
-char* getSAMLRequest2(int);
+char* getSAMLRequest2(char *, int, int);
 int verifySAMLResponse(const char*,int,char**);
 
 static xmlChar *gl_session_key = NULL;
@@ -255,7 +255,7 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 
     wpabuf_free(reqData);
 #else
-    saml_req = getSAMLRequest2(ctx->gssFlags & GSS_C_MUTUAL_FLAG);
+    saml_req = getSAMLRequest2(NULL, 0, ctx->gssFlags & GSS_C_MUTUAL_FLAG);
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
     if (MECH_SAML_EC_DEBUG)
         fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
@@ -870,6 +870,9 @@ gssEapAcceptSecContext(OM_uint32 *minor,
 
         cred = ctx->cred;
     }
+    else if (cred->name && MECH_SAML_EC_DEBUG)
+        fprintf(stdout, "CRED NAME IS: %.*s\n", cred->name->username.length,
+                   cred->name->username.value);
 
     /*
      * Previously we acquired the credential mutex here, but it should not be
@@ -942,7 +945,13 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             goto cleanup;
         }
 
-        saml_req = getSAMLRequest2(ctx->gssFlags & GSS_C_MUTUAL_FLAG);
+        if (cred->name)
+            saml_req = getSAMLRequest2(cred->name->username.value,
+                                cred->name->username.length,
+                                ctx->gssFlags & GSS_C_MUTUAL_FLAG);
+        else
+            saml_req = getSAMLRequest2(NULL, 0,
+                                ctx->gssFlags & GSS_C_MUTUAL_FLAG);
         if (saml_req != NULL) {
             major = makeStringBuffer(minor, saml_req?:"", output_token);
             free(saml_req); saml_req = NULL;

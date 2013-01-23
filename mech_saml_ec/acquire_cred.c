@@ -49,10 +49,4 @@ gss_acquire_cred(OM_uint32 * __attribute__ ((unused)) minor,
     return gssEapAcquireCred(minor, desired_name,
                              time_req, desired_mechs, cred_usage,
                              output_cred_handle, actual_mechs, time_rec);
-#if 0
-#ifdef MECH_EAP
-#else
-return GSS_S_UNAVAILABLE;
-#endif
-#endif
 }

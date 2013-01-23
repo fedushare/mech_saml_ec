@@ -161,7 +161,7 @@ private:
 };
 
 
-extern "C" char* getSAMLRequest2(int signatureRequested)
+extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequested)
 {
     string retstr = "";
 
@@ -270,15 +270,12 @@ extern "C" char* getSAMLRequest2(int signatureRequested)
                 prop = ACS->getString("Location");
                 if (prop.first) {
                     m_handlerURL += prop.second;
-                    // TODO: Delete the below once we can set this in conf file
-                    // This is to enable the initiator (ssh client) to check
+                    // TODO VSY: Delete the below once we can set this in conf file?
+                    // This is to enable the initiator (eg: ssh client) to check
                     // the target name passed in by the ssh client which is
                     // of the form host@<hostname>
-                    {
-                        char hoststr[256] = "host@";
-                        gethostname(hoststr+strlen("host@"), sizeof(hoststr) - strlen("host@"));
-                        m_handlerURL.assign(hoststr);
-                    }
+                    if (name)
+                        m_handlerURL.assign(name, name_len);
                 }
 
                 // auto_ptr_XMLCh acsLocation("https://test.cilogon.org/Shibboleth.sso/SAML2/ECP");

@@ -913,8 +913,6 @@ xmlNodeSetContent(signature_value, val);
                     "AssertionConsumerServiceURL (%s) match\n",
                     responseConsumerURL, AssertionConsumerServiceURL);
 
-        /* VSY TODO: ENABLE THIS CHECK ONCE IT IS SUPPORTED ON IDPs */
-#if 0
         if(strlen(AssertionConsumerServiceURL) != ctx->acceptorName->username.length
            ||
            strncmp(AssertionConsumerServiceURL, ctx->acceptorName->username.value,
@@ -931,7 +929,6 @@ xmlNodeSetContent(signature_value, val);
                     "AssertionConsumerServiceURL (%s) match\n",
                     ctx->acceptorName->username.length,
                     ctx->acceptorName->username.value, AssertionConsumerServiceURL);
-#endif
 
         mutual_auth = getXmlElement(xmlDocGetRootElement(doc_from_idp), "RequestAuthenticated", MECH_SAML_EC_ECP_NS);
         if (mutual_auth != NULL) {
