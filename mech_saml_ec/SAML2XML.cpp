@@ -476,6 +476,12 @@ static vector<saml2::Assertion*> extractAssertions(const Response& resp,
                 if ( decassertion )
                     {
                     cerr << "Decrypted assertion." << endl;
+                    if (getenv("MECH_SAML_EC_DEBUG")) {
+                        DOMElement* assertionElement = decassertion->marshall();
+                        stringstream s;
+                        s << *assertionElement;
+                        cerr << s.str().c_str() << endl;
+                    }
                     retval.push_back(decassertion->cloneAssertion());
                     delete decassertion;
                     tokenwrapper.release();
@@ -711,15 +717,10 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** username)
                                                             if (!a2->getAuthnStatements().empty()) {
                                                                 fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>AuthnStatements Present\n");
                                                                 // TODO VSY: check all assertions and go with the earliest SessionNotOnOrAfter
+                                                                // TODO VSY: return that SessionNotOnOrAfter to caller via parameter
                                                                 saml2::AuthnStatement* authnst = a2->getAuthnStatements().front();
-                                                                if (authnst) {
-                                                                    DOMElement* authnElement = authnst->marshall();
-                                                                    stringstream s;
-                                                                    s << *authnElement;
-                                                                    fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>AuthnStatement is: %s\n", s.str().c_str());
-                                                                    if (authnst->getSessionNotOnOrAfter() != NULL)
+                                                                if (authnst && authnst->getSessionNotOnOrAfter() != NULL)
                                                                         fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>getSessionNotOnOrAfter (%s)\n", xercesc::XMLString::transcode(authnst->getSessionNotOnOrAfter()->getFormattedString()));
-                                                                }
                                                             }
                                                             const XMLCh* protocol = samlconstants::SAML20P_NS;
                                                             saml2::NameID* v2name = a2->getSubject()?a2->getSubject()->getNameID():nullptr;
