@@ -998,8 +998,8 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                 goto cleanup;
             }
             if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_client), "Response", MECH_SAML_EC_ECP_NS)) != NULL &&
-                (session_key = getXmlElement(elem, "SessionKey", NULL)) != NULL &&
-                (gen_key = getXmlElement(elem, "GeneratedKey", NULL)) != NULL) {
+                (session_key = getXmlElement(elem, "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL &&
+                (gen_key = getXmlElement(elem, "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
                 /* Get the Algorithm attribute */
                 gl_session_key = xmlNodeGetContent(gen_key);
                 gl_encryption_type = xmlGetProp(session_key, "EncType");

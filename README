@@ -1,4 +1,4 @@
-This is an open source implementation of https://tools.ietf.org/html/draft-ietf-kitten-sasl-saml-ec.
+This is an open source implementation of https://tools.ietf.org/html/draft-ietf-kitten-sasl-saml-ec
 
 View and report issues at: https://github.com/jbasney/mech_saml_ec/issues
 
@@ -65,7 +65,7 @@ your SP, create metadata for the SP (which is needed by any Identity Provider
 particular, you need to modify the following files.
 
 (1) /etc/shibboleth/shibboleth2.xml 
-This is the mail Shibboleth SP configuration file. You should be able to use
+This is the main Shibboleth SP configuration file. You should be able to use
 the provided shibboleth2.xml.dist file as a starting point. You must set the
 following sections:
   (a) <ApplicationDefaults entityID="https://your.org/shibboleth"

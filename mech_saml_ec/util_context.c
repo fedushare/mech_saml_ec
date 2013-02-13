@@ -60,13 +60,7 @@ gssEapAllocContext(OM_uint32 *minor,
     ctx->state = GSSEAP_STATE_INITIAL;
     ctx->mechanismUsed = GSS_C_NO_OID;
 
-#ifndef MECH_EAP
-    ctx->gssFlags = GSS_C_INTEG_FLAG    |   /* integrity */
-                    GSS_C_CONF_FLAG     |   /* confidentiality */
-                    GSS_C_SEQUENCE_FLAG |   /* sequencing */
-                    GSS_C_REPLAY_FLAG;      /* replay detection */
-
-#else
+#ifdef MECH_EAP
     /*
      * Integrity, confidentiality, sequencing and replay detection are
      * always available.  Regardless of what flags are requested in
@@ -76,6 +70,11 @@ gssEapAllocContext(OM_uint32 *minor,
     */
     ctx->gssFlags = GSS_C_TRANS_FLAG    |   /* exporting contexts */
                     GSS_C_INTEG_FLAG    |   /* integrity */
+                    GSS_C_CONF_FLAG     |   /* confidentiality */
+                    GSS_C_SEQUENCE_FLAG |   /* sequencing */
+                    GSS_C_REPLAY_FLAG;      /* replay detection */
+#else
+    ctx->gssFlags = GSS_C_INTEG_FLAG    |   /* integrity */
                     GSS_C_CONF_FLAG     |   /* confidentiality */
                     GSS_C_SEQUENCE_FLAG |   /* sequencing */
                     GSS_C_REPLAY_FLAG;      /* replay detection */

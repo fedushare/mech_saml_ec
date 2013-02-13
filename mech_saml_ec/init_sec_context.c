@@ -799,7 +799,8 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
             xmlDocDump(stdout, doc_from_sp);
         }
     } else {
-        fprintf(stderr, "ERROR: Failure parsing document from SP\n");
+        fprintf(stderr, "ERROR: Failure parsing document from SP:\n%.*s\n",
+                        request->length, request->value);
         *minor = GSSEAP_BAD_CONTEXT_TOKEN;
         return GSS_S_FAILURE;
     }
@@ -951,6 +952,7 @@ xmlNodeSetContent(signature_value, val);
             session_key = xmlNewNode(NULL, "SessionKey");
             // Assume this NS doesn't yet exist
             samlec_ns = xmlNewNs(session_key, MECH_SAML_EC_SAMLEC_NS, "samlec");
+            xmlSetNs(session_key, samlec_ns);
             gen_key = xmlNewNode(samlec_ns, "GeneratedKey");
             xmlNodeSetContent(gen_key, "3w1wSBKUosRLsU69xGK7dg==");
             xmlNewNsProp(session_key, samlec_ns, "EncType", "aes128-cts-hmac-sha1-96");
@@ -959,8 +961,8 @@ xmlNodeSetContent(signature_value, val);
         }
 
         if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_idp), "Response", MECH_SAML_EC_ECP_NS)) != NULL &&
-            (session_key = getXmlElement(elem, "SessionKey", NULL)) != NULL &&
-            (gen_key = getXmlElement(elem, "GeneratedKey", NULL)) != NULL) {
+            (session_key = getXmlElement(elem, "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL &&
+            (gen_key = getXmlElement(elem, "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
             /* Get the Algorithm attribute */
             gl_session_key = xmlNodeGetContent(gen_key);
             gl_encryption_type = xmlGetNsProp(session_key, "EncType", MECH_SAML_EC_SAMLEC_NS);
