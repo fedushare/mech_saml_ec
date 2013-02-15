@@ -40,7 +40,8 @@
 #include <libxml/xmlreader.h>
 
 char* getSAMLRequest2(char *, int, int);
-int verifySAMLResponse(const char*,int,char**);
+int verifySAMLResponse(const char*,int,char**,char**);
+int getSAMLAttribute(const char* attrib, char** value);
 
 static xmlChar *gl_session_key = NULL;
 static xmlChar *gl_encryption_type = NULL;
@@ -835,6 +836,31 @@ static struct gss_eap_sm eapGssAcceptorSm[] = {
 #endif
 };
 
+
+/* Per timegm(3):
+ * For a portable version of timegm(), set the TZ  environment
+ * variable  to  UTC,  call mktime(3) and restore the value of
+ * TZ.  Something like:
+ */
+time_t
+my_timegm(struct tm *tm)
+{
+    time_t ret;
+    char *tz;
+
+    tz = getenv("TZ");
+    setenv("TZ", "", 1);
+    tzset();
+    ret = mktime(tm);
+    if (tz)
+        setenv("TZ", tz, 1);
+    else
+        unsetenv("TZ");
+    tzset();
+    return ret;
+}
+
+
 OM_uint32
 gssEapAcceptSecContext(OM_uint32 *minor,
                        gss_ctx_id_t ctx,
@@ -970,10 +996,11 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         // TODO: have verifySAMLResponse return any value found in
         // SessionNotOnOrAfter in AuthnStatement and set ctx->expiryTime
         // to that value.
-        char* username = NULL;
+        char* initiator_name = NULL;
+        char* session_not_on_or_after = NULL;
         int result = verifySAMLResponse((char*)input_token->value,
                                         (int)input_token->length,
-                                        &username);
+                                        &initiator_name, &session_not_on_or_after);
 
         if (result) {
             xmlDocPtr doc_from_client = xmlReadMemory(input_token->value, input_token->length, "FROMCLIENT", NULL, 0);
@@ -981,22 +1008,60 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             xmlNode *session_key = NULL;
             xmlNode *gen_key = NULL;
 
-            if (username) {
+            if (initiator_name) {
                 gss_buffer_desc buf = {0, NULL};
                 if (MECH_SAML_EC_DEBUG)
-                    fprintf(stdout,"Username = '%s'\n",username);
-                major = makeStringBuffer(minor, username, &buf);
+                    fprintf(stdout,"initiator name = '%s'\n",initiator_name);
+                major = makeStringBuffer(minor, initiator_name, &buf);
                 if (major == GSS_S_COMPLETE)
                     major = gssEapImportName(minor, &buf, GSS_C_NT_USER_NAME,
 					 GSS_C_NO_OID, &ctx->initiatorName);
                 major = GSS_S_COMPLETE;
                 ctx->state = GSSEAP_STATE_ESTABLISHED;
             } else {
+                fprintf(stderr, "ERROR: initiator name not available\n");
+                major = GSS_S_BAD_NAME;
+                *minor = GSSEAP_BAD_INITIATOR_NAME;
+                goto verify_cleanup;
+            }
+
+            if (session_not_on_or_after) {
+                struct tm session_tm;
+                memset(&session_tm, 0, sizeof(session_tm));
+                sscanf(session_not_on_or_after, "%d-%d-%dT%d:%d:%d.",
+                              &session_tm.tm_year, &session_tm.tm_mon,
+                              &session_tm.tm_mday, &session_tm.tm_hour,
+                              &session_tm.tm_min, &session_tm.tm_sec);
+                /* TODO VSY: check sscanf succeeded */
+                session_tm.tm_year -= 1900; /* tm_year is number of years since 1900 */
+                session_tm.tm_mon -= 1; /* month value should be 0 thru 11 */
+                session_tm.tm_isdst = -1; /* DST not known */
+                ctx->expiryTime = my_timegm(&session_tm);
+                printf("CONTEXT VALID FOR (%d) SECONDS!\n", ctx->expiryTime - time(NULL));
+                if (MECH_SAML_EC_DEBUG)
+                    fprintf(stdout, "session_not_on_or_after is (%s);"
+                              " (%d)(%d)(%d)T(%d)(%d)(%d)\n",
+                              session_not_on_or_after,
+                              session_tm.tm_year, session_tm.tm_mon,
+                              session_tm.tm_mday, session_tm.tm_hour,
+                              session_tm.tm_min, session_tm.tm_sec);
+            } else {
+                fprintf(stderr, "WARNING: SessionNotOnOrAfter not available;"
+                                " defaulting to indefinite context validity.\n");
+            }
+
+            char *local_login = NULL;
+            if (getSAMLAttribute("local-login-user", &local_login) == 1)
+            {
+                fprintf(stdout, "local-login-user is (%s)\n", local_login);
+                free(local_login); local_login = NULL;
+            } else {
                 fprintf(stderr, "ERROR: local-login-user not available\n");
                 major = GSS_S_BAD_NAME;
                 *minor = GSSEAP_BAD_INITIATOR_NAME;
-                goto cleanup;
+                goto verify_cleanup;
             }
+
             if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_client), "Response", MECH_SAML_EC_ECP_NS)) != NULL &&
                 (session_key = getXmlElement(elem, "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL &&
                 (gen_key = getXmlElement(elem, "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
@@ -1011,7 +1076,9 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             *minor = GSSEAP_PEER_AUTH_FAILURE;
         }
 
-        free(username); username = NULL;
+verify_cleanup:
+        free(initiator_name); initiator_name = NULL;
+        free(session_not_on_or_after); session_not_on_or_after = NULL;
     }
 #endif
     if (GSS_ERROR(major))

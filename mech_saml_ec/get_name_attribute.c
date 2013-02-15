@@ -36,6 +36,10 @@
  * Wrapper for retrieving a naming attribute.
  */
 
+#ifndef MECH_EAP
+int getSAMLAttribute(const char* attrib, char** value);
+#endif
+
 OM_uint32 GSSAPI_CALLCONV
 gss_get_name_attribute(OM_uint32 *minor,
                        gss_name_t name,
@@ -55,6 +59,7 @@ gss_get_name_attribute(OM_uint32 *minor,
         return GSS_S_CALL_INACCESSIBLE_READ | GSS_S_BAD_NAME;
     }
 
+#ifdef MECH_EAP
     GSSEAP_MUTEX_LOCK(&name->mutex);
 
     major = gssEapGetNameAttribute(minor, name, attr,
@@ -62,6 +67,28 @@ gss_get_name_attribute(OM_uint32 *minor,
                                    value, display_value, more);
 
     GSSEAP_MUTEX_UNLOCK(&name->mutex);
+#else
+    char *attr_str = NULL;
+    major = bufferToString(minor, attr, &attr_str);
+    if (major == GSS_S_COMPLETE) {
+        if (getSAMLAttribute(attr_str, &value->value) == 1) {
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "gss_get_name_attribute():"
+                            " attribute (%s) has value (%s)\n",
+                            attr_str, value->value);
+            value->length = strlen(value->value);
+            if (authenticated != NULL)
+                *authenticated = 1;
+            if (complete != NULL)
+                *complete = 1;
+            if (more != NULL)
+                *more = 0;
+            major = duplicateBuffer(minor, value, display_value);
+        } else
+            major = GSS_S_UNAVAILABLE;
+        free(attr_str); attr_str = NULL;
+    }
+#endif
 
     return major;
 }

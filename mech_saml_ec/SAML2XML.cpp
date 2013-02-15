@@ -56,6 +56,8 @@ using namespace xmltooling::logging;
 using namespace xmltooling;
 using namespace std;
 
+static ResolutionContext* ctx = nullptr;
+
 // Taken from http://stackoverflow.com/questions/504810/
 static string getfqdn()
 {
@@ -561,7 +563,8 @@ static vector<saml2::Assertion*> filterValidSignedAssertions(
     return invalid;
     }
 
-extern "C" int verifySAMLResponse(const char* saml, int len, char** username) 
+extern "C" int verifySAMLResponse(const char* saml, int len, char** initiator_name,
+                                  char ** session_not_or_after)
 {
     int retbool = 1; // FIXME: Defaulting to successful verification is dangerous.
     string localLoginUser = "";
@@ -715,12 +718,14 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** username)
                                                         if (!assertions.empty()) {
                                                             saml2::Assertion* a2 = assertions.front();
                                                             if (!a2->getAuthnStatements().empty()) {
-                                                                fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>AuthnStatements Present\n");
                                                                 // TODO VSY: check all assertions and go with the earliest SessionNotOnOrAfter
                                                                 // TODO VSY: return that SessionNotOnOrAfter to caller via parameter
                                                                 saml2::AuthnStatement* authnst = a2->getAuthnStatements().front();
-                                                                if (authnst && authnst->getSessionNotOnOrAfter() != NULL)
-                                                                        fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>getSessionNotOnOrAfter (%s)\n", xercesc::XMLString::transcode(authnst->getSessionNotOnOrAfter()->getFormattedString()));
+                                                                if (authnst && authnst->getSessionNotOnOrAfter() != NULL) {
+                                                                    char *tmp = xercesc::XMLString::transcode(authnst->getSessionNotOnOrAfter()->getFormattedString());
+                                                                    *session_not_or_after = strdup(tmp);
+                                                                    xercesc::XMLString::release(&tmp);
+                                                                }
                                                             }
                                                             const XMLCh* protocol = samlconstants::SAML20P_NS;
                                                             saml2::NameID* v2name = a2->getSubject()?a2->getSubject()->getNameID():nullptr;
@@ -728,26 +733,26 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** username)
                                                             tokens.assign(assertions.begin(),assertions.end());
 
                                                             LocalResolver lr(nullptr,nullptr);
-                                                            ResolutionContext* ctx = lr.resolveAttributes(
+                                                            ctx = lr.resolveAttributes(
                                                                 *app,entity.second,protocol,nullptr,v2name,
                                                                     nullptr,nullptr,&tokens);
-                                                            auto_ptr<ResolutionContext> wrapper(ctx);
-                                                            for (vector<shibsp::Attribute*>::const_iterator a = ctx->getResolvedAttributes().begin(); 
-                                                                 a != ctx->getResolvedAttributes().end(); 
-                                                                 ++a) {
-                                                                for (vector<string>::const_iterator s = (*a)->getAliases().begin(); 
-                                                                     s != (*a)->getAliases().end(); 
-                                                                     ++s) {
-                                                                    if (s->compare("local-login-user") == 0) {
-                                                                        for (vector<string>::const_iterator v=(*a)->getSerializedValues().begin();
-                                                                             v != (*a)->getSerializedValues().end(); 
-                                                                             ++v) {
-                                                                            if (v != (*a)->getSerializedValues().begin())
-                                                                                localLoginUser += ";";
-                                                                            localLoginUser += *v;
-                                                                        }
-                                                                    }
-                                                                }
+                                                            // auto_ptr<ResolutionContext> wrapper(ctx); NOTE: ctx now static to enable later retrieval of attributes
+                                                            if (v2name != nullptr) {
+                                                                char *tmp;
+                                                                localLoginUser += (tmp = xercesc::XMLString::transcode(v2name->getName()));
+                                                                xercesc::XMLString::release(&tmp);
+                                                                localLoginUser += "!";
+                                                                localLoginUser += v2name->getFormat()?(tmp = xercesc::XMLString::transcode(v2name->getFormat())):"";
+                                                                xercesc::XMLString::release(&tmp);
+                                                                localLoginUser += "!";
+                                                                localLoginUser += v2name->getNameQualifier()?(tmp = xercesc::XMLString::transcode(v2name->getNameQualifier())):"";
+                                                                xercesc::XMLString::release(&tmp);
+                                                                localLoginUser += "!";
+                                                                localLoginUser += v2name->getSPNameQualifier()?(tmp = xercesc::XMLString::transcode(v2name->getSPNameQualifier())):"";
+                                                                xercesc::XMLString::release(&tmp);
+                                                                localLoginUser += "!";
+                                                                localLoginUser += v2name->getSPProvidedID()?(tmp = xercesc::XMLString::transcode(v2name->getSPProvidedID())):"";
+                                                                xercesc::XMLString::release(&tmp);
                                                             }
                                                         } else {
                                                             cerr << "no valid assertions available to inspect for attribute mapped to local-login-user" << endl;
@@ -845,9 +850,44 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** username)
     }
 
     if (!localLoginUser.empty()) {
-      *username = strdup(localLoginUser.c_str());
+      *initiator_name = strdup(localLoginUser.c_str());
     }
 
     return retbool;
 }
 
+// 1 on success; 0 on not found
+extern "C" int getSAMLAttribute(const char* attrib, char** value)
+{
+    string localValue = "";
+
+    *value = NULL;
+
+    if (ctx == nullptr)
+        return 0;
+
+    for (vector<shibsp::Attribute*>::const_iterator a = ctx->getResolvedAttributes().begin(); 
+         a != ctx->getResolvedAttributes().end(); 
+         ++a) {
+        for (vector<string>::const_iterator s = (*a)->getAliases().begin(); 
+             s != (*a)->getAliases().end(); 
+             ++s) {
+            if (s->compare(attrib) == 0) {
+                for (vector<string>::const_iterator v=(*a)->getSerializedValues().begin();
+                     v != (*a)->getSerializedValues().end(); 
+                     ++v) {
+                    if (v != (*a)->getSerializedValues().begin())
+                        localValue += ";";
+                    localValue += *v;
+                }
+            }
+        }
+    }
+
+    if (localValue.empty())
+        return 0;
+
+    // TODO: check for allocation failure here and elsewhere.
+    *value = strdup(localValue.c_str());
+    return 1;
+}
