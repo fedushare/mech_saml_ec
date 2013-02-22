@@ -40,10 +40,10 @@
 #include <libxml/xmlreader.h>
 
 char* getSAMLRequest2(char *, int, int);
-int verifySAMLResponse(const char*,int,char**,char**);
+int verifySAMLResponse(const char*,int,char**,char**,char**);
 int getSAMLAttribute(const char* attrib, char** value);
 
-static xmlChar *gl_session_key = NULL;
+static xmlChar *gl_generated_key = NULL;
 static xmlChar *gl_encryption_type = NULL;
 
 /*
@@ -102,8 +102,8 @@ acceptReadyEap(OM_uint32 *minor, gss_ctx_id_t ctx, gss_cred_id_t cred)
                                    &ctx->rfc3961Key);
 #else
     major = gssEapDeriveRfc3961Key(minor,
-                                   gl_session_key,
-                                   strlen(gl_session_key),
+                                   gl_generated_key,
+                                   strlen(gl_generated_key),
                                    ctx->encryptionType,
                                    &ctx->rfc3961Key);
 #endif
@@ -998,15 +998,19 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         // to that value.
         char* initiator_name = NULL;
         char* session_not_on_or_after = NULL;
+        if (gl_generated_key != NULL) {
+            free(gl_generated_key); gl_generated_key = NULL;
+        }
         int result = verifySAMLResponse((char*)input_token->value,
                                         (int)input_token->length,
-                                        &initiator_name, &session_not_on_or_after);
+                                        &initiator_name, &session_not_on_or_after,
+                                        &gl_generated_key);
 
         if (result) {
             xmlDocPtr doc_from_client = xmlReadMemory(input_token->value, input_token->length, "FROMCLIENT", NULL, 0);
             xmlNode *elem = NULL;
             xmlNode *session_key = NULL;
-            xmlNode *gen_key = NULL;
+            xmlNode *enc_type = NULL;
 
             if (initiator_name) {
                 gss_buffer_desc buf = {0, NULL};
@@ -1050,6 +1054,46 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                                 " defaulting to indefinite context validity.\n");
             }
 
+            // TODO VSY: no need for this XML processing chunk once verifySAML
+            // is able to return the actual key instead of the whole Advice XML
+            xmlDocPtr advice_from_idp = NULL;
+            xmlNode *gen_key = NULL;
+            if (gl_generated_key == NULL ||
+                (advice_from_idp = xmlReadMemory(gl_generated_key,
+                            strlen(gl_generated_key), "ADVICE", NULL, 0)) == NULL ||
+                (gen_key = getXmlElement(xmlDocGetRootElement(advice_from_idp),
+                 "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) == NULL) {
+                if (getenv("MECH_SAML_EC_FORCE_SAMPLE_KEY")) {
+                    fprintf(stderr, "WARNING: No GeneratedKey in SAML Response from IdP; "
+                            "Since MECH_SAML_EC_FORCE_SAMPLE_KEY is set in the "
+                            "environment, forcing use of a sample key!\n");
+
+                    gl_generated_key = strdup("3w1wSBKUosRLsU69xGK7dg==");
+                } else {
+                    fprintf(stderr, "ERROR: No GeneratedKey in SAML assertion from IdP; "
+                        "To force use of a sample key set "
+                        "MECH_SAML_EC_FORCE_SAMPLE_KEY in the "
+                        "environment!\n");
+                    *minor = GSSEAP_KEY_UNAVAILABLE;
+                    major = GSS_S_FAILURE;
+                    goto verify_cleanup;
+                }
+            } else
+                gl_generated_key = xmlNodeGetContent(gen_key);
+
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "GeneratedKey (%s)\n", gl_generated_key);
+
+            if ((session_key = getXmlElement(xmlDocGetRootElement(doc_from_client), "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL &&
+                (enc_type = getXmlElement(session_key->children, "EncType", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
+                gl_encryption_type = xmlNodeGetContent(enc_type);
+            } else {
+                fprintf(stderr, "ERROR: SessionKey/EncType not sent by initiator(client)\n");
+                major = GSS_S_FAILURE;
+                *minor = GSSEAP_KEY_UNAVAILABLE;
+                goto verify_cleanup;
+            }
+
             char *local_login = NULL;
             if (getSAMLAttribute("local-login-user", &local_login) == 1)
             {
@@ -1060,14 +1104,6 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                 major = GSS_S_BAD_NAME;
                 *minor = GSSEAP_BAD_INITIATOR_NAME;
                 goto verify_cleanup;
-            }
-
-            if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_client), "Response", MECH_SAML_EC_ECP_NS)) != NULL &&
-                (session_key = getXmlElement(elem, "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL &&
-                (gen_key = getXmlElement(elem, "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
-                /* Get the Algorithm attribute */
-                gl_session_key = xmlNodeGetContent(gen_key);
-                gl_encryption_type = xmlGetProp(session_key, "EncType");
             }
 
             major = acceptReadyEap(minor, ctx, cred);

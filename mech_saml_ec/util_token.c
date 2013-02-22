@@ -501,6 +501,7 @@ gssEapReleaseInnerTokens(OM_uint32 *minor,
 
 #ifndef MECH_EAP
 #include <libxml/xmlreader.h>
+/* Find a following sibling or descendant of a_node with the given name */
 xmlNode *
 getXmlElement(xmlNode *a_node, char *name, char *ns)
 {

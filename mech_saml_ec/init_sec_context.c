@@ -55,8 +55,7 @@
 		"  </S:Body>" \
 		"</S:Envelope>"
 
-static xmlChar *gl_session_key = NULL;
-static xmlChar *gl_encryption_type = NULL;
+static xmlChar *gl_generated_key = NULL;
 
 #ifdef MECH_EAP
 
@@ -326,8 +325,8 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
     /* Cache encryption type derived from selected mechanism OID */
     major = gssEapOidToEnctype(minor, ctx->mechanismUsed, &ctx->encryptionType);
 #else
-    /* Cache encryption type specified by IdP */
-    major = krbStringToEnctype(gl_encryption_type, &ctx->encryptionType);
+    /* encryption type already set in processSAMLRequest */
+    GSSEAP_ASSERT(ctx->encryptionType != ENCTYPE_NULL);
 #endif
     if (GSS_ERROR(major))
         return major;
@@ -352,8 +351,8 @@ initReady(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 reqFlags)
                                    &ctx->rfc3961Key);
 #else
     major = gssEapDeriveRfc3961Key(minor,
-                                   gl_session_key,
-                                   strlen(gl_session_key),
+                                   gl_generated_key,
+                                   strlen(gl_generated_key),
                                    ctx->encryptionType,
                                    &ctx->rfc3961Key);
 #endif
@@ -777,6 +776,7 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
     xmlNode *mutual_auth = NULL;
     xmlNode *elem = NULL;
     xmlNode *session_key = NULL;
+    xmlNode *encryption_type = NULL;
     xmlNode *gen_key = NULL;
     gss_buffer_desc response_from_idp = {0, NULL};
     OM_uint32 major = GSS_S_COMPLETE;
@@ -815,12 +815,54 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
     }
     xmlUnlinkNode(header_from_sp);
 
+    if ((session_key = getXmlElement(header_from_sp, "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
+        char *algorithm = xmlGetNsProp(session_key, "EncType", MECH_SAML_EC_SAMLEC_NS);
+        
+        if (algorithm != NULL) {
+            fprintf(stderr, "ERROR: Algorithm (%s) NOT supported\n");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+
+        encryption_type = getXmlElement(session_key, "EncType", MECH_SAML_EC_SAMLEC_NS);
+        ctx->encryptionType = ENCTYPE_NULL;
+        while (ctx->encryptionType == ENCTYPE_NULL && encryption_type != NULL) {
+            char *tmp = xmlNodeGetContent(encryption_type);
+
+            if (tmp == NULL) {
+                fprintf(stderr, "ERROR: Failure of xmlNodeGetContent for "
+                                "EncType in SessionKey.");
+                *minor = GSSEAP_BAD_TOK_HEADER;
+                major = GSS_S_FAILURE;
+                goto cleanup;
+            }
+            krbStringToEnctype(tmp, &ctx->encryptionType);
+            encryption_type = encryption_type->next;
+            xmlFree(tmp); tmp = NULL;
+        }
+
+        if (ctx->encryptionType == ENCTYPE_NULL) {
+            fprintf(stderr, "ERROR: EncType is non-existent in SessionKey or is empty.");
+            *minor = GSSEAP_BAD_TOK_HEADER;
+            major = GSS_S_FAILURE;
+            goto cleanup;
+        }
+    } else {
+        fprintf(stderr, "ERROR: Authentication Request from Service Provider"
+                " doesn't contain SessionKey header block\n");
+        *minor = GSSEAP_BAD_TOK_HEADER;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+
     signature_value = getXmlElement(xmlDocGetRootElement(doc_from_sp), "SignatureValue", MECH_SAML_EC_DS_NS);
 /* Corrupt the signature for testing purposes 
 if (signature_value != NULL) {
 xmlChar *val = xmlNodeGetContent(signature_value);
 val[0] = 'M';
 xmlNodeSetContent(signature_value, val);
+}
 */
 
     if (MECH_SAML_EC_DEBUG) {
@@ -938,36 +980,77 @@ xmlNodeSetContent(signature_value, val);
             ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
         } else if (signature_value != NULL) { // SP did send a signature across
             /* VSY TODO: ecp:RequestAuthenticated not yet supported by most
-               IdPs, so assume mutual auth succeeded */
-            fprintf(stderr, "WARNING: IdP DID NOT REPORT ecp:RequestAuthenticated"
-                            " BUT SERVER DID SEND A SIGNATURE SO SETTING GSS_C_MUTUAL_FLAG ASSUMING "
-                            " IdP HAS NOT IMPLEMENTED ecp:RequestAuthenticated YET!!!\n");
-            ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
+               IdPs, so assume mutual auth succeeded if we are forced */
+            if (getenv("MECH_SAML_EC_FORCE_MUTUAL_AUTH_FLAG")) {
+                fprintf(stderr, "WARNING: IdP DID NOT REPORT ecp:RequestAuthenticated"
+                            " BUT SERVER DID SEND A SIGN REQUEST AND "
+                            "MECH_SAML_EC_FORCE_MUTUAL_AUTH_FLAG IS SET IN "
+                            "ENVIRONMENT SO FORCE SETTING GSS_C_MUTUAL_FLAG ASSUMING "
+                            " IdP HAS CHECKED SIGNATURE BUT HAS NOT IMPLEMENTED "
+                            "ecp:RequestAuthenticated YET!!!\n");
+                ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
+            } else {
+                fprintf(stderr, "ERROR: IdP DID NOT REPORT ecp:RequestAuthenticated"
+                            " BUT SERVER DID SIGN THE REQUEST. TO FORCE SET GSS_C_MUTUAL_FLAG ASSUMING "
+                            " IdP HAS CHECKED THE SIGNATURE SET "
+                            "MECH_SAML_EC_FORCE_MUTUAL_AUTH_FLAG IN ENVIRONMENT!!!\n");
+                *minor = GSSEAP_PEER_AUTH_FAILURE;
+                major = GSS_S_FAILURE;
+                goto cleanup;
+            }
         }
 
-        /* TODO VSY: DELETE THIS FAKE GeneratedKey ADDED FOR TEST PURPOSES!!! */
-        if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_idp), "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) == NULL) {
+        /* TODO VSY: DELETE THIS GeneratedKey ADDED FOR TEST PURPOSES!!! */
+        if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_idp), "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) == NULL && getenv("MECH_SAML_EC_FORCE_SAMPLE_KEY")) {
             xmlNsPtr samlec_ns;
+            fprintf(stderr, "WARNING: No GeneratedKey in SAML Response from IdP; "
+                            "Since MECH_SAML_EC_FORCE_SAMPLE_KEY is set in the "
+                            "environment, forcing use of a sample key!\n");
             elem = getXmlElement(xmlDocGetRootElement(doc_from_idp), "Response", MECH_SAML_EC_ECP_NS);
-            session_key = xmlNewNode(NULL, "SessionKey");
-            // Assume this NS doesn't yet exist
-            samlec_ns = xmlNewNs(session_key, MECH_SAML_EC_SAMLEC_NS, "samlec");
-            xmlSetNs(session_key, samlec_ns);
-            gen_key = xmlNewNode(samlec_ns, "GeneratedKey");
+            gen_key = xmlNewNode(NULL, "GeneratedKey");
+            // Check if this NS already exists?
+            samlec_ns = xmlNewNs(gen_key, MECH_SAML_EC_SAMLEC_NS, "samlec");
+            xmlSetNs(gen_key, samlec_ns);
             xmlNodeSetContent(gen_key, "3w1wSBKUosRLsU69xGK7dg==");
-            xmlNewNsProp(session_key, samlec_ns, "EncType", "aes128-cts-hmac-sha1-96");
-            xmlAddChild(session_key, gen_key);
-            xmlAddNextSibling(elem, session_key);
+            xmlAddNextSibling(elem, gen_key);
         }
 
-        if ((elem = getXmlElement(xmlDocGetRootElement(doc_from_idp), "Response", MECH_SAML_EC_ECP_NS)) != NULL &&
-            (session_key = getXmlElement(elem, "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL &&
-            (gen_key = getXmlElement(elem, "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
-            /* Get the Algorithm attribute */
-            gl_session_key = xmlNodeGetContent(gen_key);
-            gl_encryption_type = xmlGetNsProp(session_key, "EncType", MECH_SAML_EC_SAMLEC_NS);
+        if ((gen_key = getXmlElement(xmlDocGetRootElement(doc_from_idp), "GeneratedKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
+            gl_generated_key = xmlNodeGetContent(gen_key);
+
+            /* Add SessionKey/EncType as sibling of gen_key */
+            session_key = xmlNewNode(NULL, "SessionKey");
+            xmlNsPtr samlec_ns = xmlNewNs(session_key, MECH_SAML_EC_SAMLEC_NS, "samlec");
+            xmlSetNs(session_key, samlec_ns);
+
+            gss_buffer_desc buffer = GSS_C_EMPTY_BUFFER;
+            char *tmp = NULL;
+            krb5_context krbContext;
+            GSSEAP_KRB_INIT(&krbContext);
+            if  (krbEnctypeToString(krbContext, ctx->encryptionType, "", &buffer) != 0 ||
+                 bufferToString(&tmpMinor, &buffer, &tmp) != GSS_S_COMPLETE) {
+                fprintf(stderr, "ERROR: Failed to convert context's encryption type to string\n");
+                *minor = GSSEAP_KEY_UNAVAILABLE;
+                major = GSS_S_FAILURE;
+                goto cleanup;
+            }
+            encryption_type = xmlNewNode(samlec_ns, "EncType");
+            xmlNodeSetContent(encryption_type, tmp);
+            GSSEAP_FREE(buffer.value); buffer.value = NULL;
+            free(tmp); tmp = NULL;
+            xmlAddChild(session_key, encryption_type);
+            xmlAddNextSibling(gen_key, session_key);
+
+            /* Exclude GeneratedKey from header block since there should be
+               a copy in the (encrypted) assertion that the SP can get the
+               key from. */
+            xmlUnlinkNode(gen_key);
+            xmlFreeNode(gen_key); gen_key = NULL;
         } else { // RFC requires support for GSS_C_CONF_FLAG, GSS_C_INTEG_FLAG
-            fprintf(stderr, "ERROR: No Session Key in SAML Response from IdP\n");
+            fprintf(stderr, "ERROR: No GeneratedKey in SAML header block from IdP; "
+                            "To force use of a sample key set "
+                            "MECH_SAML_EC_FORCE_SAMPLE_KEY in the "
+                            "environment!\n");
             *minor = GSSEAP_KEY_UNAVAILABLE;
             major = GSS_S_FAILURE;
             goto cleanup;
