@@ -303,6 +303,9 @@ gssEapInquireCred(OM_uint32 *minor,
                   gss_cred_usage_t *cred_usage,
                   gss_OID_set *mechanisms);
 
+OM_uint32
+readChannelBindingsType(OM_uint32 *minor, char **cb_type);
+
 /* util_crypt.c */
 int
 gssEapEncrypt(krb5_context context, int dce_style, size_t ec,
@@ -1050,6 +1053,7 @@ int mech_saml_ec_debug;
 #define MECH_SAML_EC_DS_NS      "http://www.w3.org/2000/09/xmldsig#"
 #define MECH_SAML_EC_PAOS_NS    "urn:liberty:paos:2003-08"
 #define MECH_SAML_EC_ECP_NS     "urn:oasis:names:tc:SAML:2.0:profiles:SSO:ecp"
+#define MECH_SAML_EC_CB_NS      "urn:oasis:names:tc:SAML:protocol:ext:channel-binding"
 #define MECH_SAML_EC_SAMLEC_NS  "urn:ietf:params:xml:ns:samlec"
 
 #ifndef MECH_EAP

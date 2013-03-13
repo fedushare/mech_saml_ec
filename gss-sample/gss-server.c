@@ -180,6 +180,11 @@ server_establish_context(int s, gss_cred_id_t server_creds,
     OM_uint32 maj_stat, min_stat, acc_sec_min_stat;
     gss_buffer_desc oid_name;
     int     token_flags;
+#ifndef MECH_EAP
+    struct gss_channel_bindings_struct cb = {GSS_C_AF_NULLADDR, {0, NULL},
+                                             GSS_C_AF_NULLADDR, {0, NULL},
+        {strlen("HLJHLJHLJHLJHJKLHLJHLJH"), "HLJHLJHLJHLJHJKLHLJHLJH"}};
+#endif
 
     if (recv_token(s, &token_flags, &recv_tok) < 0)
         return -1;
@@ -211,7 +216,11 @@ server_establish_context(int s, gss_cred_id_t server_creds,
 
             maj_stat = gss_accept_sec_context(&acc_sec_min_stat, context,
                                               server_creds, &recv_tok,
+#ifdef MECH_EAP
                                               GSS_C_NO_CHANNEL_BINDINGS,
+#else
+                                              &cb,
+#endif
                                               &client, &doid, &send_tok,
                                               ret_flags,
                                               NULL,  /* time_rec */

@@ -39,7 +39,7 @@
 
 #include <libxml/xmlreader.h>
 
-char* getSAMLRequest2(char *, int, int);
+char* getSAMLRequest2(char *, int, int, char*);
 int verifySAMLResponse(const char*,int,char**,char**,char**);
 int getSAMLAttribute(const char* attrib, char** value);
 
@@ -256,7 +256,7 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 
     wpabuf_free(reqData);
 #else
-    saml_req = getSAMLRequest2(NULL, 0, ctx->gssFlags & GSS_C_MUTUAL_FLAG);
+    saml_req = getSAMLRequest2(NULL, 0, ctx->gssFlags & GSS_C_MUTUAL_FLAG, NULL);
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
     if (MECH_SAML_EC_DEBUG)
         fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
@@ -878,6 +878,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
     char *saml_req = NULL;
 #ifndef MECH_EAP
     int initialContextToken = (ctx->mechanismUsed == GSS_C_NO_OID);
+    char *cb_type = NULL;
 #endif
 
     if (cred == GSS_C_NO_CREDENTIAL) {
@@ -971,13 +972,30 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             goto cleanup;
         }
 
+        char *cb_data = NULL;
+        if (input_chan_bindings != GSS_C_NO_CHANNEL_BINDINGS &&
+            input_chan_bindings->application_data.length != 0)
+            base64Encode(input_chan_bindings->application_data.value,
+                input_chan_bindings->application_data.length, &cb_data);
+
+        if (cb_data != NULL) {
+            major = readChannelBindingsType(&tmpMinor, &cb_type);
+            if (major != GSS_S_COMPLETE) {
+                fprintf(stderr, "ERROR: Couldn't find Channel Bindings Type\n");
+                goto cleanup;
+            }
+        }
+
         if (cred->name)
             saml_req = getSAMLRequest2(cred->name->username.value,
                                 cred->name->username.length,
-                                ctx->gssFlags & GSS_C_MUTUAL_FLAG);
+                                ctx->gssFlags & GSS_C_MUTUAL_FLAG, cb_data);
         else
             saml_req = getSAMLRequest2(NULL, 0,
-                                ctx->gssFlags & GSS_C_MUTUAL_FLAG);
+                                ctx->gssFlags & GSS_C_MUTUAL_FLAG, cb_data);
+        if (cb_data != NULL) {
+            GSSEAP_FREE(cb_data); cb_data = NULL;
+        }
         if (saml_req != NULL) {
             major = makeStringBuffer(minor, saml_req?:"", output_token);
             free(saml_req); saml_req = NULL;

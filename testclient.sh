@@ -2,6 +2,8 @@
 
 host='localhost'
 port=3490
+# NOTE: ProtectNetwork currently doesn't understand ChannelBindings so it will
+# fail the request with HTTP 500.
 idp='https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP'
 #idp='https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP'
 user_cert="$SAML_EC_USER_CERT"
@@ -34,5 +36,9 @@ else
     fi
 fi
 
-SAML_EC_IDP="$idp" SAML_EC_USER_CERT="$user_cert" SAML_EC_USER_KEY="$user_key" gss-sample/gss-client -nw -nx -nm -port $port -user "$username" -pass "$password" -mech "{ 1 3 6 1 4 1 11591 4 6 }" $host test testmessage
+if [ $idp="https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP" ] ; then
+    echo "NOTE: ProtectNetwork may not understand ChannelBindings so it might fail the request with HTTP 500."
+fi
+
+SAML_EC_IDP="$idp" SAML_EC_USER_CERT="$user_cert" SAML_EC_USER_KEY="$user_key" gss-sample/gss-client -nw -nx -nm -port $port -user "$username" -pass "$password" -mech "{ 1 3 6 1 4 1 11591 4 6 }" $host "host@`hostname`" testmessage
 

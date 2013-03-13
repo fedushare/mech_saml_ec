@@ -40,6 +40,9 @@
 #include <libxml/xmlreader.h>
 #include <curl/curl.h>
 
+#include <sys/types.h>
+#include <pwd.h>
+
 #define SAML_EC_IDP		"SAML_EC_IDP"
 #define SAML_EC_USER_CERT	"SAML_EC_USER_CERT"
 #define SAML_EC_USER_KEY	"SAML_EC_USER_KEY"
@@ -766,18 +769,21 @@ cleanup:
 
 OM_uint32
 processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
+                 gss_channel_bindings_t input_chan_bindings,
                  gss_buffer_t request, gss_buffer_t response)
 {
     char *idp = getenv(SAML_EC_IDP);
     xmlDocPtr doc_from_sp = NULL;
     xmlDocPtr doc_from_idp = NULL;
     xmlNode *header_from_sp = NULL;
+    xmlNode *header_to_idp = NULL;
     xmlNode *signature_value = NULL;
     xmlNode *mutual_auth = NULL;
     xmlNode *elem = NULL;
     xmlNode *session_key = NULL;
     xmlNode *encryption_type = NULL;
     xmlNode *gen_key = NULL;
+    xmlNode *cb_elem = NULL;
     gss_buffer_desc response_from_idp = {0, NULL};
     OM_uint32 major = GSS_S_COMPLETE;
     OM_uint32 tmpMinor = 0;
@@ -813,13 +819,44 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
         major = GSS_S_FAILURE;
         goto cleanup;
     }
+    header_to_idp = xmlCopyNode(header_from_sp, 0 /* no children or props */);
     xmlUnlinkNode(header_from_sp);
+
+    char *cb_data = NULL;
+
+    if (input_chan_bindings != GSS_C_NO_CHANNEL_BINDINGS &&
+        input_chan_bindings->application_data.length != 0 &&
+        base64Encode(input_chan_bindings->application_data.value,
+            input_chan_bindings->application_data.length, &cb_data) != -1) {
+        char *cb_type = NULL;
+
+        major = readChannelBindingsType(&tmpMinor, &cb_type);
+        if (major != GSS_S_COMPLETE) {
+            fprintf(stderr, "ERROR: Couldn't find Channel Bindings Type\n");
+            goto cleanup;
+        }
+
+        cb_elem = xmlNewNode(NULL, "ChannelBindings");
+        xmlNsPtr cb_ns = xmlNewNs(cb_elem, MECH_SAML_EC_CB_NS, "cb");
+        xmlSetNs(cb_elem, cb_ns);
+        xmlAddChild(header_to_idp, cb_elem);
+        xmlAddPrevSibling(xmlDocGetRootElement(doc_from_sp)->children, header_to_idp);
+        xmlSetNs(header_to_idp, xmlDocGetRootElement(doc_from_sp)->ns);
+        xmlSetProp(cb_elem, "Type", cb_type /* "tls-server-end-point" */);
+        xmlSetNsProp(cb_elem, header_to_idp->ns, "actor", "http://schemas.xmlsoap.org/soap/actor/next");
+        xmlSetNsProp(cb_elem, header_to_idp->ns, "mustUnderstand", "1");
+        xmlNodeSetContent(cb_elem, cb_data);
+        if (cb_data != NULL) {
+            GSSEAP_FREE(cb_data); cb_data = NULL;
+        }
+        free(cb_type); cb_type = NULL;
+    }
 
     if ((session_key = getXmlElement(header_from_sp, "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
         char *algorithm = xmlGetNsProp(session_key, "EncType", MECH_SAML_EC_SAMLEC_NS);
         
         if (algorithm != NULL) {
-            fprintf(stderr, "ERROR: Algorithm (%s) NOT supported\n");
+            fprintf(stderr, "ERROR: Algorithm (%s) NOT supported\n", algorithm);
             *minor = GSSEAP_BAD_TOK_HEADER;
             major = GSS_S_FAILURE;
             goto cleanup;
@@ -857,7 +894,7 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
     }
 
     signature_value = getXmlElement(xmlDocGetRootElement(doc_from_sp), "SignatureValue", MECH_SAML_EC_DS_NS);
-/* Corrupt the signature for testing purposes 
+/* TODO VSY: Delete this: Corrupt the signature for testing purposes 
 if (signature_value != NULL) {
 xmlChar *val = xmlNodeGetContent(signature_value);
 val[0] = 'M';
@@ -982,18 +1019,18 @@ xmlNodeSetContent(signature_value, val);
             /* VSY TODO: ecp:RequestAuthenticated not yet supported by most
                IdPs, so assume mutual auth succeeded if we are forced */
             if (getenv("MECH_SAML_EC_FORCE_MUTUAL_AUTH_FLAG")) {
-                fprintf(stderr, "WARNING: IdP DID NOT REPORT ecp:RequestAuthenticated"
-                            " BUT SERVER DID SEND A SIGN REQUEST AND "
-                            "MECH_SAML_EC_FORCE_MUTUAL_AUTH_FLAG IS SET IN "
-                            "ENVIRONMENT SO FORCE SETTING GSS_C_MUTUAL_FLAG ASSUMING "
-                            " IdP HAS CHECKED SIGNATURE BUT HAS NOT IMPLEMENTED "
-                            "ecp:RequestAuthenticated YET!!!\n");
+                fprintf(stderr, "WARNING: IdP did NOT report ecp:RequestAuthenticated"
+                            " but server did send a sign request and "
+                            "MECH_SAML_EC_FORCE_MUTUAL_AUTH_FLAG is set in "
+                            "environment so force-setting GSS_C_MUTUAL_FLAG assuming "
+                            " IdP has checked signature but has not implemented "
+                            "ecp:RequestAuthenticated yet!!!\n");
                 ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
             } else {
-                fprintf(stderr, "ERROR: IdP DID NOT REPORT ecp:RequestAuthenticated"
-                            " BUT SERVER DID SIGN THE REQUEST. TO FORCE SET GSS_C_MUTUAL_FLAG ASSUMING "
-                            " IdP HAS CHECKED THE SIGNATURE SET "
-                            "MECH_SAML_EC_FORCE_MUTUAL_AUTH_FLAG IN ENVIRONMENT!!!\n");
+                fprintf(stderr, "ERROR: IdP did NOT report ecp:RequestAuthenticated"
+                            " but server did sign the request. To force-set GSS_C_MUTUAL_FLAG assuming "
+                            " IdP has checked the signature set "
+                            "MECH_SAML_EC_FORCE_MUTUAL_AUTH_FLAG in environment!!!\n");
                 *minor = GSSEAP_PEER_AUTH_FAILURE;
                 major = GSS_S_FAILURE;
                 goto cleanup;
@@ -1465,7 +1502,8 @@ gssEapInitSecContext(OM_uint32 *minor,
             ctx->state = GSSEAP_STATE_AUTHENTICATE;
         }
     } else {
-        major = processSAMLRequest(minor, ctx, input_token, output_token);
+        major = processSAMLRequest(minor, ctx, input_chan_bindings,
+                                     input_token, output_token);
         if (major != GSS_S_COMPLETE) {
             fprintf(stderr, "ERROR: SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");
             makeStringBuffer(&tmpMinor, SOAP_FAULT_MSG, output_token);

@@ -180,6 +180,11 @@ client_establish_context(int s, char *service_name, OM_uint32 gss_flags,
         gss_cred_id_t cred = GSS_C_NO_CREDENTIAL;
         gss_name_t gss_username = GSS_C_NO_NAME;
         gss_OID_set_desc mechs, *mechsp = GSS_C_NO_OID_SET;
+#ifndef MECH_EAP
+        struct gss_channel_bindings_struct cb = {GSS_C_AF_NULLADDR, {0, NULL},
+                                                 GSS_C_AF_NULLADDR, {0, NULL},
+            {strlen("HLJHLJHLJHLJHJKLHLJHLJH"), "HLJHLJHLJHLJHJKLHLJHLJH"}};
+#endif
 
         if (spnego) {
             mechs.elements = &gss_spnego_mechanism_oid_desc;
@@ -292,7 +297,11 @@ client_establish_context(int s, char *service_name, OM_uint32 gss_flags,
                                             cred, gss_context,
                                             target_name, mechs.elements,
                                             gss_flags, 0,
+#ifdef MECH_EAP
                                             NULL, /* channel bindings */
+#else
+                                            &cb,
+#endif
                                             token_ptr, NULL, /* mech type */
                                             &send_tok, ret_flags,
                                             NULL);  /* time_rec */

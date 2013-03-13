@@ -110,6 +110,96 @@ gssEapReleaseCred(OM_uint32 *minor, gss_cred_id_t *pCred)
     return GSS_S_COMPLETE;
 }
 
+/* Derived from util_cred.c:readStaticIdentityFile() */
+OM_uint32
+readChannelBindingsType(OM_uint32 *minor, char **cb_type)
+{
+    OM_uint32 major, tmpMinor;
+    FILE *fp = NULL;
+    char buf[BUFSIZ];
+    char *ccacheName;
+    int i = 0;
+#ifndef WIN32
+    struct passwd *pw = NULL, pwd;
+    char pwbuf[BUFSIZ];
+#endif
+
+    *cb_type = NULL;
+
+    ccacheName = getenv("GSS_SAML_EC_CB_TYPE_FILE");
+    if (ccacheName == NULL) {
+#ifdef WIN32
+        TCHAR szPath[MAX_PATH];
+
+        if (!SUCCEEDED(SHGetFolderPath(NULL,
+                                       CSIDL_APPDATA, /* |CSIDL_FLAG_CREATE */
+                                       NULL, /* User access token */
+                                       0,    /* SHGFP_TYPE_CURRENT */
+                                       szPath))) {
+            major = GSS_S_CRED_UNAVAIL;
+            *minor = GSSEAP_GET_LAST_ERROR(); /* XXX */
+            goto cleanup;
+        }
+
+        snprintf(buf, sizeof(buf), "%s/.gss_saml_ec_cb_type", szPath);
+#else
+        if (getpwuid_r(getuid(), &pwd, pwbuf, sizeof(pwbuf), &pw) != 0 ||
+            pw == NULL || pw->pw_dir == NULL) {
+            major = GSS_S_CRED_UNAVAIL;
+            *minor = GSSEAP_GET_LAST_ERROR();
+            goto cleanup;
+        }
+
+        snprintf(buf, sizeof(buf), "%s/.gss_saml_ec_cb_type", pw->pw_dir);
+#endif /* WIN32 */
+        ccacheName = buf;
+    }
+
+    if (MECH_SAML_EC_DEBUG)
+        printf("Looking for Channel Bindings Type in (%s)\n", ccacheName);
+
+    fp = fopen(ccacheName, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "ERROR: Channel Bindings Type not specified in (%s) nor"
+                  " in a file pointed to by the environment variable: "
+                  " GSS_SAML_EC_CB_TYPE_FILE\n", ccacheName);
+        major = GSS_S_BAD_BINDINGS;
+        *minor = GSSEAP_SAML_BINDING_FAILURE;
+        goto cleanup;
+    }
+
+    if (fgets(buf, sizeof(buf), fp) != NULL) {
+
+        if (strlen(buf) && buf[strlen(buf) - 1] == '\n') {
+            buf[strlen(buf) - 1] = '\0';
+        }
+        *cb_type = strdup(buf);
+    }
+
+    if (*cb_type == NULL || strlen(*cb_type) == 0) {
+        fprintf(stderr, "ERROR: Channel Bindings Type not specified\n");
+        major = GSS_S_BAD_BINDINGS;
+        *minor = GSSEAP_SAML_BINDING_FAILURE;
+        goto cleanup;
+    }
+
+    major = GSS_S_COMPLETE;
+    *minor = 0;
+
+cleanup:
+    if (fp != NULL)
+        fclose(fp);
+
+    if (GSS_ERROR(major)) {
+        if (*cb_type)
+            free(*cb_type); *cb_type = NULL;
+    }
+
+    memset(buf, 0, sizeof(buf));
+
+    return major;
+}
+
 static OM_uint32
 readStaticIdentityFile(OM_uint32 *minor,
                        gss_buffer_t defaultIdentity,

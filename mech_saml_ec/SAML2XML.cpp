@@ -163,7 +163,8 @@ private:
 };
 
 
-extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequested)
+extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequested,
+                               char *channel_bindings)
 {
     string retstr = "";
 
@@ -272,7 +273,6 @@ extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequeste
                 prop = ACS->getString("Location");
                 if (prop.first) {
                     m_handlerURL += prop.second;
-                    // TODO VSY: Delete the below once we can set this in conf file?
                     // This is to enable the initiator (eg: ssh client) to check
                     // the target name passed in by the ssh client which is
                     // of the form host@<hostname>
@@ -294,6 +294,9 @@ extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequeste
                 NameIDPolicy* namepol = NameIDPolicyBuilder::buildNameIDPolicy();
                 namepol->AllowCreate(true);
                 request->setNameIDPolicy(namepol);
+
+                opensaml::saml2p::Extensions* exten = opensaml::saml2p::ExtensionsBuilder::buildExtensions();
+                request->setExtensions(exten);
 
                 XMLObject* requestobj = request.get();
              
@@ -371,6 +374,27 @@ extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequeste
                 static const XMLCh encTypeContent[] = { chLatin_a, chLatin_e, chLatin_s, chDigit_1, chDigit_2, chDigit_8, chDash, chLatin_c, chLatin_t, chLatin_s, chDash, chLatin_h, chLatin_m, chLatin_a, chLatin_c, chDash, chLatin_s, chLatin_h, chLatin_a, chDigit_1, chDash, chDigit_9, chDigit_6};
                 encType->setTextContent(encTypeContent);
                 hdrblock->getUnknownXMLObjects().push_back(encType);
+
+                if (channel_bindings != NULL) {
+                // Create cb:ChannelBindings header block.
+                static const XMLCh CHANNEL_BINDINGS[] = UNICODE_LITERAL_15(C,h,a,n,n,e,l,B,i,n,d,i,n,g,s);
+                static const XMLCh CB_PREFIX[] = UNICODE_LITERAL_2(c,b);
+                static const XMLCh CB_NS[] = { chLatin_u, chLatin_r, chLatin_n, chColon, chLatin_o, chLatin_a, chLatin_s, chLatin_i, chLatin_s, chColon, chLatin_n, chLatin_a, chLatin_m, chLatin_e, chLatin_s, chColon, chLatin_t, chLatin_c, chColon, chLatin_S, chLatin_A, chLatin_M, chLatin_L, chColon, chLatin_p, chLatin_r, chLatin_o, chLatin_t, chLatin_o, chLatin_c, chLatin_o, chLatin_l, chColon, chLatin_e, chLatin_x, chLatin_t, chColon, chLatin_c, chLatin_h, chLatin_a, chLatin_n, chLatin_n, chLatin_e, chLatin_l, chDash, chLatin_b, chLatin_i, chLatin_n, chLatin_d, chLatin_i, chLatin_n, chLatin_g, chNull };
+                hdrblock = dynamic_cast<ElementProxy*>(m_anyBuilder.buildObject(CB_NS, CHANNEL_BINDINGS, CB_PREFIX));
+                hdrblock->setAttribute(qMU, XML_ONE);
+                hdrblock->setAttribute(qActor, m_actor.get());
+                static const XMLCh cbType[] = UNICODE_LITERAL_4(T,y,p,e);
+                auto_ptr_XMLCh m_cbtype("tls-server-end-point");
+                hdrblock->setAttribute(xmltooling::QName(nullptr, cbType), m_cbtype.get());
+                header->getUnknownXMLObjects().push_back(hdrblock);
+
+                // Generate cb:ChannelBindings and make it a child of Extensions
+                ElementProxy* cb = dynamic_cast<ElementProxy*>(m_anyBuilder.buildObject(CB_NS, CHANNEL_BINDINGS, CB_PREFIX));
+                cb->setAttribute(xmltooling::QName(nullptr, cbType), m_cbtype.get());
+                auto_ptr_XMLCh m_cbcontent(channel_bindings);
+                cb->setTextContent(m_cbcontent.get());
+                exten->getUnknownXMLObjects().push_back(cb);
+                }
 
                 // Create ecp:Request header.
                 static const XMLCh IsPassive[] = UNICODE_LITERAL_9(I,s,P,a,s,s,i,v,e);
