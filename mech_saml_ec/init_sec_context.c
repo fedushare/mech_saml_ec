@@ -676,6 +676,8 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
     }
 
     if ((res = curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err_msg)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_URL, idp)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L)) != CURLE_OK ||

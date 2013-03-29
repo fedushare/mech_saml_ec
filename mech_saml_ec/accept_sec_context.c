@@ -942,7 +942,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
 
         /* Format of innerToken: [hok],[mutual-auth] */
 
-        /* VSY TODO: hok has yet to be implemented */
+        /* TODO: hok (holder of key) has yet to be implemented */
 
         /* should see comma now */
         if (innerToken.length <= 0 || ((char *)innerToken.value)[0] != ',') {
