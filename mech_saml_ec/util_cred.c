@@ -94,6 +94,9 @@ gssEapReleaseCred(OM_uint32 *minor, gss_cred_id_t *pCred)
     gssEapReleaseName(&tmpMinor, &cred->target);
 
     zeroAndReleasePassword(&cred->password);
+#ifndef MECH_EAP
+    zeroAndReleasePassword(&cred->deleg_assertions);
+#endif
 
     gss_release_buffer(&tmpMinor, &cred->radiusConfigFile);
     gss_release_buffer(&tmpMinor, &cred->radiusConfigStanza);
@@ -612,6 +615,38 @@ cleanup:
     return major;
 }
 
+#ifndef MECH_EAP
+OM_uint32
+gssEapSetCredDelegAssertions(OM_uint32 *minor,
+                      gss_cred_id_t cred,
+                      const gss_buffer_t deleg_assertions)
+{
+    OM_uint32 major, tmpMinor;
+    gss_buffer_desc newAssertions = GSS_C_EMPTY_BUFFER;
+
+    if (cred->flags & CRED_FLAG_RESOLVED) {
+        major = GSS_S_FAILURE;
+        *minor = GSSEAP_CRED_RESOLVED;
+        goto cleanup;
+    }
+
+    if (deleg_assertions != GSS_C_NO_BUFFER) {
+        major = duplicateBuffer(minor, deleg_assertions, &newAssertions);
+        if (GSS_ERROR(major))
+            goto cleanup;
+    }
+
+    gss_release_buffer(&tmpMinor, &cred->deleg_assertions);
+    cred->deleg_assertions = newAssertions;
+
+    major = GSS_S_COMPLETE;
+    *minor = 0;
+
+cleanup:
+    return major;
+}
+#endif
+
 OM_uint32
 gssEapSetCredService(OM_uint32 *minor,
                      gss_cred_id_t cred,
@@ -679,6 +714,14 @@ gssEapDuplicateCred(OM_uint32 *minor,
         if (GSS_ERROR(major))
             goto cleanup;
     }
+
+#ifndef MECH_EAP
+    if (src->deleg_assertions.value != NULL) {
+        major = duplicateBuffer(minor, &src->deleg_assertions, &dst->deleg_assertions);
+        if (GSS_ERROR(major))
+            goto cleanup;
+    }
+#endif
 
     major = duplicateOidSet(minor, src->mechanisms, &dst->mechanisms);
     if (GSS_ERROR(major))

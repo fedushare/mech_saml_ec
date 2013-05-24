@@ -149,6 +149,9 @@ struct gss_cred_id_struct
     gss_name_t name;
     gss_name_t target; /* for initiator */
     gss_buffer_desc password;
+#ifndef MECH_EAP
+    gss_buffer_desc deleg_assertions;
+#endif
     gss_OID_set mechanisms;
     time_t expiryTime;
     gss_buffer_desc radiusConfigFile;

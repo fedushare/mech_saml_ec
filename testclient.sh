@@ -31,12 +31,12 @@ if [ ! -s "$user_cert" ] || [ ! -s "$user_key"] ; then
     fi 
 else
     # If using user cert/key with boingo, append 'SSL' to idp url
-    if [ $idp="https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP" ] ; then
-        idp="$dp""SSL"
+    if [ $idp == "https://boingo.ncsa.uiuc.edu/idp/profile/SAML2/SOAP/ECP" ] ; then
+        idp = "$idp""SSL"
     fi
 fi
 
-if [ $idp="https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP" ] ; then
+if [ $idp == "https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP" ] ; then
     echo "NOTE: ProtectNetwork may not understand ChannelBindings so it might fail the request with HTTP 500."
 fi
 

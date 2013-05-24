@@ -164,7 +164,7 @@ private:
 
 
 extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequested,
-                               char *channel_bindings)
+                               int deleg_requested, char *channel_bindings)
 {
     string retstr = "";
 
@@ -298,8 +298,17 @@ extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequeste
                 opensaml::saml2p::Extensions* exten = opensaml::saml2p::ExtensionsBuilder::buildExtensions();
                 request->setExtensions(exten);
 
+                Conditions* cond = ConditionsBuilder::buildConditions();
+                AudienceRestriction *audience_res = AudienceRestrictionBuilder::buildAudienceRestriction();
+                Audience* audience = AudienceBuilder::buildAudience();
+                static const XMLCh IDP_AS_AUDIENCE[] = { chLatin_u, chLatin_r, chLatin_n, chColon, chLatin_o, chLatin_a, chLatin_s, chLatin_i, chLatin_s, chColon, chLatin_n, chLatin_a, chLatin_m, chLatin_e, chLatin_s, chColon, chLatin_t, chLatin_c, chColon, chLatin_S, chLatin_A, chLatin_M, chLatin_L, chColon, chDigit_2, chPeriod, chDigit_0, chColon, chLatin_c, chLatin_o, chLatin_n, chLatin_d, chLatin_i, chLatin_t, chLatin_i, chLatin_o, chLatin_n, chLatin_s, chColon, chLatin_d, chLatin_e, chLatin_l, chLatin_e, chLatin_g, chLatin_a, chLatin_t, chLatin_i, chLatin_o, chLatin_n, chNull };
+                audience->setTextContent(IDP_AS_AUDIENCE);
+                audience_res->getAudiences().push_back(audience);
+                cond->getAudienceRestrictions().push_back(audience_res);
+                request->setConditions(cond);
+
                 XMLObject* requestobj = request.get();
-             
+
                 // Taken from AbstractHandler.cpp
                 // sendMessage(*encoder,requestobj,relayState.c_str(),dest.get()[=nullptr],
                 //             role[=nullptr],app,httpResponse,false);
@@ -603,10 +612,12 @@ static vector<saml2::Assertion*> filterValidSignedAssertions(
     }
 
 extern "C" int verifySAMLResponse(const char* saml, int len, char** initiator_name,
-                                  char ** session_not_or_after, char **generated_key)
+                                  char ** session_expiry, char **generated_key,
+                                  char **delegated_assertions)
 {
     int retbool = 1; // FIXME: Defaulting to successful verification is dangerous.
     string initiatorName = "";
+    stringstream deleg_assertion_str;
 
     XMLToolingConfig::getConfig().log_config("DEBUG");
     Category& log = Category::getInstance(SHIBSP_LOGCAT".verifySAMLResponse");
@@ -754,17 +765,34 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** initiator_na
                                                     // Attempt to extract local-login-user attribute
                                                     // Taken from resolvertest.cpp
                                                     if (retbool) {
-                                                        if (!assertions.empty()) {
-                                                            saml2::Assertion* a2 = assertions.front();
-                                                            if (!a2->getAuthnStatements().empty()) {
-                                                                // Draft wording refers to one assertion with one AuthnStatement within it. TODO VSY: check this and fail if it is not true?
-                                                                saml2::AuthnStatement* authnst = a2->getAuthnStatements().front();
-                                                                if (authnst && authnst->getSessionNotOnOrAfter() != NULL) {
-                                                                    char *tmp = xercesc::XMLString::transcode(authnst->getSessionNotOnOrAfter()->getFormattedString());
-                                                                    *session_not_or_after = strdup(tmp);
-                                                                    xercesc::XMLString::release(&tmp);
+                                                        saml2::NameID* v2name = nullptr;
+                                                        const xmltooling::DateTime* session_not_on_or_after = nullptr;
+                                                        for (size_t i = 0; i < assertions.size(); ++i) {
+                                                            saml2::Assertion* a2 = assertions[i];
+                                                            int deleg_assertion = 0;
+                                                            saml2::Conditions* cond = a2->getConditions();
+                                                            if (cond != NULL) {
+                                                                for (size_t j = 0; j < cond->getAudienceRestrictions().size(); ++j) {
+                                                                    for (size_t k = 0; k < cond->getAudienceRestrictions()[j]->getAudiences().size(); ++k) {
+                                                                        if (XMLString::equals(issuer->getName(), cond->getAudienceRestrictions()[j]->getAudiences()[k]->getAudienceURI())) {
+                                                                            deleg_assertion = 1;
+                                                                            fprintf(stderr, "ASSERTION DELEGATED!\n");
+                                                                        }
+                                                                    }
                                                                 }
                                                             }
+                                                            if (deleg_assertion) {
+                                                                DOMElement* assertionElement = a2->marshall();
+                                                                deleg_assertion_str << *assertionElement;
+                                                            }
+                                                            for (size_t j = 0; j < a2->getAuthnStatements().size(); ++j) {
+                                                                saml2::AuthnStatement* authnst = (a2->getAuthnStatements())[j];
+                                                                if (authnst->getSessionNotOnOrAfter() != NULL) {
+                                                                    if (session_not_on_or_after == nullptr || xmltooling::DateTime().compareOrder(session_not_on_or_after, authnst->getSessionNotOnOrAfter()) > 0)
+                                                                        session_not_on_or_after = authnst->getSessionNotOnOrAfter();
+                                                                }
+                                                            }
+                                                            if (generated_key != NULL && (*generated_key) == NULL) {
                                                             saml2::Advice* advice = a2->getAdvice();
                                                             if (advice != nullptr) {
                                                                 // TODO VSY: Get GeneratedKey content and return it instead of whole Advice XML
@@ -773,40 +801,53 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** initiator_na
                                                                 s << *adviceElement;
                                                                 *generated_key = strdup(s.str().c_str());
                                                             }
-                                                            const XMLCh* protocol = samlconstants::SAML20P_NS;
-                                                            saml2::NameID* v2name = a2->getSubject()?a2->getSubject()->getNameID():nullptr;
-                                                            vector<const opensaml::Assertion*> tokens;
-                                                            tokens.assign(assertions.begin(),assertions.end());
-
-                                                            LocalResolver lr(nullptr,nullptr);
-                                                            ctx = lr.resolveAttributes(
-                                                                *app,entity.second,protocol,nullptr,v2name,
-                                                                    nullptr,nullptr,&tokens);
-                                                            // auto_ptr<ResolutionContext> wrapper(ctx); NOTE: ctx now static to enable later retrieval of attributes
-                                                            if (v2name != nullptr) {
-                                                                char *tmp;
-                                                                initiatorName += (tmp = xercesc::XMLString::transcode(v2name->getName()));
-                                                                xercesc::XMLString::release(&tmp);
-                                                                initiatorName += "!";
-                                                                initiatorName += v2name->getFormat()?(tmp = xercesc::XMLString::transcode(v2name->getFormat())):"";
-                                                                xercesc::XMLString::release(&tmp);
-                                                                initiatorName += "!";
-                                                                initiatorName += v2name->getNameQualifier()?(tmp = xercesc::XMLString::transcode(v2name->getNameQualifier())):"";
-                                                                xercesc::XMLString::release(&tmp);
-                                                                initiatorName += "!";
-                                                                initiatorName += v2name->getSPNameQualifier()?(tmp = xercesc::XMLString::transcode(v2name->getSPNameQualifier())):"";
-                                                                xercesc::XMLString::release(&tmp);
-                                                                initiatorName += "!";
-                                                                initiatorName += v2name->getSPProvidedID()?(tmp = xercesc::XMLString::transcode(v2name->getSPProvidedID())):"";
-                                                                xercesc::XMLString::release(&tmp);
                                                             }
-                                                        } else {
+                                                            if (v2name == nullptr) {
+                                                                v2name = a2->getSubject()?a2->getSubject()->getNameID():nullptr;
+                                                            }
+                                                        }
+                                                        if (assertions.empty()) {
                                                             cerr << "no valid assertions available to inspect for attribute mapped to local-login-user" << endl;
                                                             retbool = 0;
+                                                        }
+                                                        const XMLCh* protocol = samlconstants::SAML20P_NS;
+                                                        vector<const opensaml::Assertion*> tokens;
+                                                        tokens.assign(assertions.begin(),assertions.end());
+
+                                                        LocalResolver lr(nullptr,nullptr);
+                                                        ctx = lr.resolveAttributes(
+                                                            *app,entity.second,protocol,nullptr,v2name,
+                                                                nullptr,nullptr,&tokens);
+                                                        // auto_ptr<ResolutionContext> wrapper(ctx); NOTE: ctx now static to enable later retrieval of attributes
+                                                        if (v2name != nullptr) {
+                                                            char *tmp;
+                                                            initiatorName += (tmp = xercesc::XMLString::transcode(v2name->getName()));
+                                                            xercesc::XMLString::release(&tmp);
+                                                            initiatorName += "!";
+                                                            tmp = NULL;
+                                                            initiatorName += v2name->getFormat()?(tmp = xercesc::XMLString::transcode(v2name->getFormat())):"urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified";
+                                                            if (tmp != NULL)
+                                                            xercesc::XMLString::release(&tmp);
+                                                            initiatorName += "!";
+                                                            initiatorName += v2name->getNameQualifier()?(tmp = xercesc::XMLString::transcode(v2name->getNameQualifier())):"";
+                                                            xercesc::XMLString::release(&tmp);
+                                                            initiatorName += "!";
+                                                            initiatorName += v2name->getSPNameQualifier()?(tmp = xercesc::XMLString::transcode(v2name->getSPNameQualifier())):"";
+                                                            xercesc::XMLString::release(&tmp);
+                                                            initiatorName += "!";
+                                                            initiatorName += v2name->getSPProvidedID()?(tmp = xercesc::XMLString::transcode(v2name->getSPProvidedID())):"";
+                                                            xercesc::XMLString::release(&tmp);
+                                                        }
+                                                        if (session_not_on_or_after != nullptr && session_expiry != NULL) {
+                                                            char *tmp = XMLString::transcode(session_not_on_or_after->getFormattedString());
+                                                            *session_expiry = strdup(tmp);
+fprintf(stderr, ">>>>>>>>>>>>>>SESSION NOT ON OR AFTER (%s)(%d)\n", tmp, session_not_on_or_after->getYear());
+                                                            XMLString::release(&tmp);
                                                         }
                                                     }
                                                 }
                                             }
+
                                             for_each(assertions.begin(), assertions.end(), xmltooling::cleanup<saml2::Assertion>());
                                         } catch (bad_cast&) {
                                             cerr << "caught a bad_cast while extracting message details" << endl;
@@ -898,6 +939,9 @@ extern "C" int verifySAMLResponse(const char* saml, int len, char** initiator_na
     if (!initiatorName.empty()) {
       *initiator_name = strdup(initiatorName.c_str());
     }
+
+    if (!deleg_assertion_str.str().empty())
+        *delegated_assertions = strdup(deleg_assertion_str.str().c_str());
 
     return retbool;
 }

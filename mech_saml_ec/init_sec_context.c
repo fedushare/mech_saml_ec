@@ -770,7 +770,7 @@ cleanup:
 }
 
 OM_uint32
-processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx,
+processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 req_flags,
                  gss_channel_bindings_t input_chan_bindings,
                  gss_buffer_t request, gss_buffer_t response)
 {
@@ -1075,6 +1075,8 @@ xmlNodeSetContent(signature_value, val);
             }
             encryption_type = xmlNewNode(samlec_ns, "EncType");
             xmlNodeSetContent(encryption_type, tmp);
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "NOTE: Encryption Type for session key is (%s)\n", tmp);
             GSSEAP_FREE(buffer.value); buffer.value = NULL;
             free(tmp); tmp = NULL;
             xmlAddChild(session_key, encryption_type);
@@ -1094,6 +1096,21 @@ xmlNodeSetContent(signature_value, val);
             major = GSS_S_FAILURE;
             goto cleanup;
         }
+
+        if (getXmlElement(xmlDocGetRootElement(doc_from_idp), "Delegated",
+                                          MECH_SAML_EC_SAMLEC_NS) != NULL)
+            if (req_flags & GSS_C_DELEG_FLAG) {
+                ctx->gssFlags |= GSS_C_DELEG_FLAG;
+                if (MECH_SAML_EC_DEBUG)
+                    fprintf(stdout, "NOTE: Credential being delegated to acceptor\n");
+            } else {
+                fprintf(stderr, "ERROR: Credential Delegation was NOT requested "
+                            "but IdP has delegated a credential possibly at  "
+                            "the request of the server. \n");
+                *minor = GSSEAP_BAD_CONTEXT_OPTION;
+                major = GSS_S_FAILURE;
+                goto cleanup;
+            }
 
         header_from_idp = getXmlElement(xmlDocGetRootElement(doc_from_idp), "Header", MECH_SAML_EC_SOAP11_NS);
         if (header_from_idp == NULL) {
@@ -1487,12 +1504,22 @@ gssEapInitSecContext(OM_uint32 *minor,
     if (initialContextToken) {
         gss_buffer_desc innerToken = GSS_C_EMPTY_BUFFER;
 
+        /* Holder-of-key (HOK) not supported yet */
         major = makeStringBuffer(minor, ",", &innerToken);
         if (major != GSS_S_COMPLETE)
             goto cleanup;
 
         if (req_flags & GSS_C_MUTUAL_FLAG) {
             major = addToStringBuffer(minor, MECH_SAML_EC_MUTUAL_AUTH, strlen(MECH_SAML_EC_MUTUAL_AUTH), &innerToken);
+            if (major != GSS_S_COMPLETE)
+                goto cleanup;
+        }
+        major = addToStringBuffer(minor, ",", strlen(","), &innerToken);
+            if (major != GSS_S_COMPLETE)
+                goto cleanup;
+
+        if (req_flags & GSS_C_DELEG_FLAG) {
+            major = addToStringBuffer(minor, MECH_SAML_EC_DELEG_REQ, strlen(MECH_SAML_EC_DELEG_REQ), &innerToken);
             if (major != GSS_S_COMPLETE)
                 goto cleanup;
         }
@@ -1504,7 +1531,7 @@ gssEapInitSecContext(OM_uint32 *minor,
             ctx->state = GSSEAP_STATE_AUTHENTICATE;
         }
     } else {
-        major = processSAMLRequest(minor, ctx, input_chan_bindings,
+        major = processSAMLRequest(minor, ctx, req_flags, input_chan_bindings,
                                      input_token, output_token);
         if (major != GSS_S_COMPLETE) {
             fprintf(stderr, "ERROR: SOAP FAULT RESPONSE BEING SENT>>>>>>>>>>>>>>>\n");

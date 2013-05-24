@@ -196,10 +196,4 @@ gss_display_status(OM_uint32 *minor,
     }
 
     return gssEapDisplayStatus(minor, status_value, status_string);
-#if 0
-#ifdef MECH_EAP
-#else
-    return GSS_S_UNAVAILABLE;
-#endif
-#endif
 }

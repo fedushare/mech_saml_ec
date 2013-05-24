@@ -39,8 +39,8 @@
 
 #include <libxml/xmlreader.h>
 
-char* getSAMLRequest2(char *, int, int, char*);
-int verifySAMLResponse(const char*,int,char**,char**,char**);
+char* getSAMLRequest2(char *, int, int, int, char*);
+int verifySAMLResponse(const char*,int,char**,char**,char**,char**);
 int getSAMLAttribute(const char* attrib, char** value);
 
 static xmlChar *gl_generated_key = NULL;
@@ -256,7 +256,8 @@ eapGssSmAcceptIdentity(OM_uint32 *minor,
 
     wpabuf_free(reqData);
 #else
-    saml_req = getSAMLRequest2(NULL, 0, ctx->gssFlags & GSS_C_MUTUAL_FLAG, NULL);
+    saml_req = getSAMLRequest2(NULL, 0, ctx->gssFlags & GSS_C_MUTUAL_FLAG,
+                                ctx->gssFlags & GSS_C_DELEG_FLAG, NULL);
     major = makeStringBuffer(minor, saml_req?:"", outputToken);
     if (MECH_SAML_EC_DEBUG)
         fprintf(stdout, "--- SENDING SAML_AUTHREQUEST: ---\n%s\n", 
@@ -875,8 +876,8 @@ gssEapAcceptSecContext(OM_uint32 *minor,
                        gss_cred_id_t *delegated_cred_handle)
 {
     OM_uint32 major, tmpMinor;
-    char *saml_req = NULL;
 #ifndef MECH_EAP
+    char *saml_req = NULL;
     int initialContextToken = (ctx->mechanismUsed == GSS_C_NO_OID);
     char *cb_type = NULL;
 #endif
@@ -940,7 +941,7 @@ gssEapAcceptSecContext(OM_uint32 *minor,
 
         GSSEAP_ASSERT(oidEqual(ctx->mechanismUsed, GSS_SAMLEC_MECHANISM));
 
-        /* Format of innerToken: [hok],[mutual-auth] */
+        /* Format of innerToken: [hok],[mutual-auth],[del] */
 
         /* TODO: hok (holder of key) has yet to be implemented */
 
@@ -963,6 +964,28 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             ctx->gssFlags |= GSS_C_MUTUAL_FLAG;
             innerToken.value += strlen(MECH_SAML_EC_MUTUAL_AUTH);
             innerToken.length -= strlen(MECH_SAML_EC_MUTUAL_AUTH);
+        }
+
+        /* should see comma now */
+        if (innerToken.length <= 0 || ((char *)innerToken.value)[0] != ',') {
+            fprintf(stderr, "ERROR: unexpected token content\n");
+            *minor = GSSEAP_WRONG_SIZE;
+            major = GSS_S_DEFECTIVE_TOKEN;
+            goto cleanup;
+        } else { /* skip comma */
+            innerToken.value++;
+            innerToken.length--;
+        }
+
+        if (innerToken.length >= strlen(MECH_SAML_EC_DELEG_REQ) &&
+            strncmp(MECH_SAML_EC_DELEG_REQ, innerToken.value,
+                          strlen(MECH_SAML_EC_DELEG_REQ)) == 0) {
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "NOTE: Credential Delegation requested\n");
+                fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>NOTE: Credential Delegation requested\n");
+            ctx->gssFlags |= GSS_C_DELEG_FLAG;
+            innerToken.value += strlen(MECH_SAML_EC_DELEG_REQ);
+            innerToken.length -= strlen(MECH_SAML_EC_DELEG_REQ);
         }
 
         if (innerToken.length) {
@@ -989,10 +1012,12 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         if (cred->name)
             saml_req = getSAMLRequest2(cred->name->username.value,
                                 cred->name->username.length,
-                                ctx->gssFlags & GSS_C_MUTUAL_FLAG, cb_data);
+                                ctx->gssFlags & GSS_C_MUTUAL_FLAG,
+                                ctx->gssFlags & GSS_C_DELEG_FLAG, cb_data);
         else
             saml_req = getSAMLRequest2(NULL, 0,
-                                ctx->gssFlags & GSS_C_MUTUAL_FLAG, cb_data);
+                                ctx->gssFlags & GSS_C_MUTUAL_FLAG,
+                                ctx->gssFlags & GSS_C_DELEG_FLAG, cb_data);
         if (cb_data != NULL) {
             GSSEAP_FREE(cb_data); cb_data = NULL;
         }
@@ -1016,13 +1041,14 @@ gssEapAcceptSecContext(OM_uint32 *minor,
         // to that value.
         char* initiator_name = NULL;
         char* session_not_on_or_after = NULL;
+        char* delegated_assertions = NULL;
         if (gl_generated_key != NULL) {
             free(gl_generated_key); gl_generated_key = NULL;
         }
         int result = verifySAMLResponse((char*)input_token->value,
                                         (int)input_token->length,
                                         &initiator_name, &session_not_on_or_after,
-                                        &gl_generated_key);
+                                        &gl_generated_key, &delegated_assertions);
 
         if (result) {
             xmlDocPtr doc_from_client = xmlReadMemory(input_token->value, input_token->length, "FROMCLIENT", NULL, 0);
@@ -1070,6 +1096,41 @@ gssEapAcceptSecContext(OM_uint32 *minor,
             } else {
                 fprintf(stderr, "WARNING: SessionNotOnOrAfter not available;"
                                 " defaulting to indefinite context validity.\n");
+            }
+
+            if (delegated_assertions != NULL && delegated_cred_handle != NULL) {
+                
+                if (MECH_SAML_EC_DEBUG)
+                    printf("NOTE: Delegated Assertion(s): (%s)", delegated_assertions);
+
+                major = gssEapAcquireCred(minor, ctx->initiatorName,
+                                      GSS_C_INDEFINITE /* timeReq TODO: ENABLE THIS in gssEapAcquireCred*/,
+                                      GSS_C_NO_OID_SET,
+                                      GSS_C_INITIATE, delegated_cred_handle,
+                                      NULL, NULL);
+                if (GSS_ERROR(major)) {
+                    fprintf(stderr, "ERROR: gssEapAcquireCred failed for delegated "
+                                    "credential\n");
+                    goto verify_cleanup;
+                }
+
+                gss_buffer_desc buf = {0, NULL};
+                major = makeStringBuffer(minor, delegated_assertions,
+                                    &buf);
+                if (GSS_ERROR(major)) {
+                    fprintf(stderr, "ERROR: makeStringBuffer failed for delegated "
+                                    "credential\n");
+                    goto verify_cleanup;
+                }
+
+                major = gssEapSetCredDelegAssertions(minor, delegated_cred_handle, &buf);
+                if (GSS_ERROR(major)) {
+                    fprintf(stderr, "ERROR: gssEapSetCredDelegAssertions failed for delegated "
+                                    "credential\n");
+                    goto verify_cleanup;
+                }
+
+                ctx->gssFlags |= GSS_C_DELEG_FLAG;
             }
 
             // TODO VSY: no need for this XML processing chunk once verifySAML
