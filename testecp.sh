@@ -13,16 +13,16 @@
 userid=$LOGNAME
 
 # idpid = your idp entity id
-idpid="urn:mace:incommon:idp.protectnetwork.org"
+idpid="urn:mace:incommon:uiuc.edu"
 
 # ecpurl = your idp's ECP URL
-ecpurl="https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP"
+ecpurl="https://shibboleth.illinois.edu/idp/profile/SAML2/SOAP/ECP"
 
 # rpid = a valid SP entityId that is configured for ECP
-rpid="https://ec.ncsa.illinois.edu/shibboleth"
+rpid="https://cilogon.org/shibboleth"
 
 # acsurl,ascurlbinding = an AssertionConsumerService URL and binding
-acsurl="https://ec.ncsa.illinois.edu/Shibboleth.sso/SAML2/ECP"
+acsurl="https://cilogon.org/Shibboleth.sso/SAML2/ECP"
 acsurlbinding="urn:oasis:names:tc:SAML:2.0:bindings:PAOS"
 
 #
