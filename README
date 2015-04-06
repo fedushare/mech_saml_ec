@@ -142,7 +142,7 @@ Testing Library with MIT GSS example programs:
 
 # cd gss-sample
 # export SAML_EC_IDP='https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP'    # Use your IdP's ECP endpoint
-# ./gss-client -nw -nx -nm -port 3490 -user <username> -pass <password> -mech "{ 1 3 6 1 4 1 11591 4 6 }" localhost test testmessage
+# ./gss-client -nw -nx -nm -port 3490 -user <username> -pass <password> -mech "{ 1 3 6 1 4 1 11591 4 6 }" localhost host@fqdn testmessage # must match host@fqdn in AssertionConsumerService Location 
 
 -------------------------------------
 
@@ -234,7 +234,7 @@ Run Client:
   $ # First set IdP as shown next
   $ export SAML_EC_IDP=https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP
   $ cd openssh-moonshot/bin
-  $ ./ssh -vvv -p 2222 localhost
+  $ ./ssh -vvv -p 2222 fqdn # must match host@fqdn in AssertionConsumerService Location
 
 -------------------------------------
 
