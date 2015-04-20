@@ -122,6 +122,13 @@ MECH_SAML_EC_DEBUG.
 
 -------------------------------------
 
+More configuration
+
+Place the following in ~/.gss_saml_ec_cb_type:
+tls-server-end-point
+
+-------------------------------------
+
 Testing Library with MIT GSS example programs:
 
 1. Start Server as follows. In one window, run:
