@@ -168,18 +168,18 @@ ProtectNetwork's metadata and register your SP with ProtectNetwork.
 To register your SP with ProtectNetwork, you must first apply for a
 ProtectNetwork Administrator account:
 
-https://www.protectnetwork.org/pnidm/adminRegistration.html
+https://app.protectnetwork.org/adminRegistration.html
 
 Then use the 'Administrator Login' link:
 
-https://www.protectnetwork.org/pnidm/admin/login.jsp
+https://app.protectnetwork.org/admin/login
 
 Then click the Add Site button to add a new SP and wait for approval.
 
 To actually log in via SAML ECP, you need to register for a
 ProtectNetwork UserID:
 
-https://www.protectnetwork.org/pnidm/registration.html
+https://app.protectnetwork.org/registration.html
 
 Finally, you can use the ProtectNetwork IdP's ECP endpoint to log in
 with your ProtectNetwork UserID and password:
