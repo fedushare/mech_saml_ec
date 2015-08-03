@@ -76,13 +76,11 @@ static string getfqdn()
 
     if ((gai_result = getaddrinfo(hostname, "http", &hints, &info)) != 0) {
         retstr = "localhost";
+    } else {
+        retstr = info->ai_canonname;
+        freeaddrinfo(info);
     }
 
-    for (p = info; p != NULL; p = p->ai_next) {
-        retstr = p->ai_canonname;
-    }
-
-    freeaddrinfo(info);
     return retstr;
 }
 
