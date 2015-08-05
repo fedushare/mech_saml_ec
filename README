@@ -122,10 +122,12 @@ MECH_SAML_EC_DEBUG.
 
 -------------------------------------
 
-More configuration
+ECP ChannelBindings configuration
 
 Place the following in ~/.gss_saml_ec_cb_type:
 tls-server-end-point
+
+Note this requires tls-server-end-point ChannelBindings support in the IdP (included in Shibboleth IdP v2.4.0 and later).
 
 -------------------------------------
 
