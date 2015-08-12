@@ -208,10 +208,10 @@ Place the following in $HOME/krb5-install/etc/krb5.conf :
 [libdefaults]
     default_realm = YOUR_DOMAIN_ALL_CAPS
 
-Download and install Project Moonshot OpenSSH modified for SAML EC
+Download and install Project Moonshot OpenSSH
 
-  git clone git@github.com:jbasney/moonshot-openssh.git
-  cd moonshot-openssh/
+  git clone http://www.project-moonshot.org/git/openssh.git
+  cd openssh/
   ./configure --prefix=$HOME/openssh-moonshot --with-kerberos5=$HOME/krb5-install
   make install
 
