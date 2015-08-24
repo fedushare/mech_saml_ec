@@ -43,7 +43,11 @@ For RHEL/CentOS based systems the basic steps are:
         libevent \
         libxml2-devel \
         libtool \
-        gcc gcc-c++
+        gcc \
+        gcc-c++ \
+        byacc \
+        libcurl \
+        libcurl-devel
     ```
 
 3. If you are running RHEL6 (may also apply to CentOS6), you may encounter a
