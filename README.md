@@ -282,4 +282,7 @@ $ ./ssh -vvv -p 2222 fqdn # must match host@fqdn in AssertionConsumerService Loc
 ## Acknowledgements
 
 Development of this software was supported in part by a gift from the
-Internet Society (www.internetsociety.org).
+[Internet Society](www.internetsociety.org).
+
+This material is based upon work supported by the [National Science Foundation](http://www.nsf.gov/) under grant number 1440609.
+Any opinions, findings, and conclusions or recommendations expressed in this material are those of the authors and do not necessarily reflect the views of the United States Government or any agency thereof.
