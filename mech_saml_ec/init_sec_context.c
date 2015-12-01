@@ -675,6 +675,15 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         major = GSS_S_FAILURE;
     }
 
+    struct curl_slist *headersList = NULL;
+    headersList = curl_slist_append(headersList, "Content-Type: text/xml");
+    if (headersList == NULL) {
+        fprintf(stderr, "ERROR: curl_slist_append failed\n");
+        *minor = GSSEAP_BAD_USAGE;
+        major = GSS_S_FAILURE;
+        goto cleanup;
+    }
+
     if ((res = curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err_msg)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0)) != CURLE_OK ||
@@ -697,7 +706,8 @@ sendToIdP(OM_uint32 *minor, xmlDocPtr doc, char *idp,
         (res = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, mem)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, size)) != CURLE_OK ||
         (res = curl_easy_setopt(curl, CURLOPT_WRITEDATA, response)) != CURLE_OK ||
-        (res = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data)) != CURLE_OK) {
+        (res = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data)) != CURLE_OK ||
+        (res = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headersList)) != CURLE_OK) {
         fprintf(stderr, "ERROR: curl_easy_setopt failure; %s\n", curl_easy_strerror(res));
         *minor = GSSEAP_BAD_USAGE;
         major = GSS_S_FAILURE;
@@ -761,6 +771,10 @@ cleanup:
     if (mem)
         xmlFree(mem);
     mem = NULL;
+
+    if (headersList) {
+        curl_slist_free_all(headersList);
+    }
 
     if (curl)
         curl_easy_cleanup(curl);
@@ -856,7 +870,7 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 req_flags,
 
     if ((session_key = getXmlElement(header_from_sp, "SessionKey", MECH_SAML_EC_SAMLEC_NS)) != NULL) {
         char *algorithm = xmlGetNsProp(session_key, "EncType", MECH_SAML_EC_SAMLEC_NS);
-        
+
         if (algorithm != NULL) {
             fprintf(stderr, "ERROR: Algorithm (%s) NOT supported\n", algorithm);
             *minor = GSSEAP_BAD_TOK_HEADER;
@@ -896,7 +910,7 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 req_flags,
     }
 
     signature_value = getXmlElement(xmlDocGetRootElement(doc_from_sp), "SignatureValue", MECH_SAML_EC_DS_NS);
-/* TODO VSY: Delete this: Corrupt the signature for testing purposes 
+/* TODO VSY: Delete this: Corrupt the signature for testing purposes
 if (signature_value != NULL) {
 xmlChar *val = xmlNodeGetContent(signature_value);
 val[0] = 'M';
@@ -1331,7 +1345,7 @@ eapGssSmInitInitiatorMIC(OM_uint32 *minor,
 
     return GSS_S_CONTINUE_NEEDED;
 }
- 
+
 static OM_uint32
 eapGssSmInitAcceptorMIC(OM_uint32 *minor,
                         gss_cred_id_t cred GSSEAP_UNUSED,
