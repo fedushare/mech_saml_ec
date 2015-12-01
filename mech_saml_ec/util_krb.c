@@ -34,6 +34,9 @@
  * Kerberos 5 helpers.
  */
 
+#include <stdint.h>
+#include <limits.h>
+
 #include "gssapiP_eap.h"
 
 void
@@ -394,30 +397,18 @@ krbEnctypeToString(
                    const char *prefix,
                    gss_buffer_t string)
 {
-    krb5_error_code code;
-#ifdef HAVE_HEIMDAL_VERSION
-    char *enctypeBuf = NULL;
-#else
+    // Write string representation of enctype number to string parameter to output to XML.
+
     char enctypeBuf[128];
-#endif
     size_t prefixLength, enctypeLength;
 
-#ifdef HAVE_HEIMDAL_VERSION
-    code = krb5_enctype_to_string(krbContext, enctype, &enctypeBuf);
-#else
-    code = krb5_enctype_to_name(enctype, 0, enctypeBuf, sizeof(enctypeBuf));
-#endif
-    if (code != 0)
-        return code;
+    snprintf(enctypeBuf, 128, "%d", enctype);
 
     prefixLength = (prefix != NULL) ? strlen(prefix) : 0;
     enctypeLength = strlen(enctypeBuf);
 
     string->value = GSSEAP_MALLOC(prefixLength + enctypeLength + 1);
     if (string->value == NULL) {
-#ifdef HAVE_HEIMDAL_VERSION
-        krb5_xfree(enctypeBuf);
-#endif
         return ENOMEM;
     }
 
@@ -428,10 +419,6 @@ krbEnctypeToString(
     string->length = prefixLength + enctypeLength;
     ((char *)string->value)[string->length] = '\0';
 
-#ifdef HAVE_HEIMDAL_VERSION
-    krb5_xfree(enctypeBuf);
-#endif
-
     return 0;
 }
 
@@ -441,13 +428,41 @@ krbStringToEnctype(
                    char *string,
                    krb5_enctype *enctype)
 {
-    krb5_error_code code;
+    // Parse enctype number string from XML into Kerberos enctype.
 
-    if (!string)
-        code = EINVAL;
-    else
-        code = krb5_string_to_enctype(string, enctype);
-    return (code == 0) ? GSS_S_COMPLETE : GSS_S_FAILURE;
+    int failed = 0;
+    if (!string) {
+        failed = 1;
+    } else {
+        char *temp;
+        errno = 0;
+        long val = strtol(string, &temp, 10);
+
+        if (temp == string || *temp != '\0' ||
+            ((val == LONG_MIN || val == LONG_MAX) && errno == ERANGE) ||
+            (val < INT32_MIN || val > INT32_MAX)) // krb5_enctype is a 32 bit int
+        {
+            failed = 1;
+        } else {
+            // Validate this is a correct enctype number by attempting to convert it to a name
+            krb5_error_code code;
+#ifdef HAVE_HEIMDAL_VERSION
+            char *enctypeBuf = NULL;
+            code = krb5_enctype_to_string(krbContext, (krb5_enctype) val, &enctypeBuf);
+            krb5_xfree(enctypeBuf);
+#else
+            char enctypeBuf[128];
+            code = krb5_enctype_to_name((krb5_enctype) val, 0, enctypeBuf, sizeof(enctypeBuf));
+#endif
+            if (code != 0) {
+                failed = 1;
+            } else {
+                *enctype = val;
+            }
+        }
+    }
+
+    return (failed == 0) ? GSS_S_COMPLETE : GSS_S_FAILURE;
 }
 #endif
 

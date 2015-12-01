@@ -378,7 +378,9 @@ extern "C" char* getSAMLRequest2(char *name, int name_len, int signatureRequeste
                 // Generate EncType and make it a child of SessionKey
                 static const XMLCh ENC_TYPE[] = UNICODE_LITERAL_7(E,n,c,T,y,p,e);
                 ElementProxy* encType = dynamic_cast<ElementProxy*>(m_anyBuilder.buildObject(SAMLEC_NS, ENC_TYPE, SAMLEC_PREFIX));
-                static const XMLCh encTypeContent[] = { chLatin_a, chLatin_e, chLatin_s, chDigit_1, chDigit_2, chDigit_8, chDash, chLatin_c, chLatin_t, chLatin_s, chDash, chLatin_h, chLatin_m, chLatin_a, chLatin_c, chDash, chLatin_s, chLatin_h, chLatin_a, chDigit_1, chDash, chDigit_9, chDigit_6};
+                // Code for AES128-CTS-HMAC-SHA1-96 enc type
+                // http://web.mit.edu/KERBEROS/krb5-1.11/doc/appdev/refs/macros/ENCTYPE_AES128_CTS_HMAC_SHA1_96.html
+                static const XMLCh encTypeContent[] = { chDigit_1, chDigit_7 };
                 encType->setTextContent(encTypeContent);
                 hdrblock->getUnknownXMLObjects().push_back(encType);
 
