@@ -40,7 +40,7 @@ envelope='<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/" xmlns:
 
 # make the request
 
-resp="`curl -k -s -d \"$envelope\" -u \"${userid}\" \"${ecpurl}\" `" 
+resp="`curl -k -s -H 'Content-Type: text/xml; charset=utf-8' -d \"$envelope\" -u \"${userid}\" \"${ecpurl}\" `" 
 
 # examine what we got
 
