@@ -104,6 +104,18 @@ particular, you need to modify the following files.
         <Attribute name="urn:oid:2.5.4.42" id="local-login-user"/>
         ```
 
+3. Metadata
+
+    The following AssertionConsumerService should be added to the SP metadata consumed
+    by the IdP.
+
+    ```
+    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:PAOS" Location="host@<fqdn>" index="<index>"/>
+    ```
+
+    Replace `<fqdn>` with the fully qualified domain name of your SP and `<index>` with this AssertionConsumerService's
+    index in the SP's list of all AssertionConsumerServices.
+
 ## Testing your IdP configuration
 
 Before trying the SAML EC GSS mechanism, first confirm that your SAML
@@ -277,6 +289,28 @@ $ # First set IdP as shown next
 $ export SAML_EC_IDP=https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP
 $ cd openssh-moonshot/bin
 $ ./ssh -vvv -p 2222 fqdn # must match host@fqdn in AssertionConsumerService Location
+```
+
+## IdP v3
+
+By default, version 3 of the Shibboleth IdP will reject relying party endpoints that do not use either `http` or `https`
+URL schemes. To allow the IdP to send assertions to `mech_saml_ec`'s `host@fqdn` AssertionConsumerService (which the
+IdP interprets as using a `null` URL scheme), add the following to `$IDP_HOME/conf/global.xml`:
+
+```xml
+<bean class="org.springframework.beans.factory.config.MethodInvokingBean" depends-on="shibboleth.OpenSAMLConfig">
+    <property name="targetClass" value="org.opensaml.saml.config.SAMLConfigurationSupport"/>
+    <property name="targetMethod" value="setAllowedBindingURLSchemes"/>
+    <property name="arguments">
+        <list>
+            <util:list>
+                <value>http</value>
+                <value>https</value>
+                <null />
+            </util:list>
+        </list>
+    </property>
+</bean>
 ```
 
 ## Acknowledgements
