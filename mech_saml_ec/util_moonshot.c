@@ -107,8 +107,8 @@ libMoonshotResolveDefaultIdentity(OM_uint32 *minor,
     }
 
     tmpBuffer.value = nai;
-    if (strchr(nai, '@')) {
-        tmpBuffer.length = strchr(nai, '@') - nai;
+    if (strrchr(nai, '@')) {
+        tmpBuffer.length = strrchr(nai, '@') - nai;
     } else {
         tmpBuffer.length = strlen(nai);
     }
@@ -189,8 +189,8 @@ libMoonshotResolveInitiatorCred(OM_uint32 *minor,
     gssEapReleaseName(&tmpMinor, &cred->name);
 
     tmpBuffer.value = nai;
-    if (strchr(nai, '@')) {
-        tmpBuffer.length = strchr(nai, '@') - nai;
+    if (strrchr(nai, '@')) {
+        tmpBuffer.length = strrchr(nai, '@') - nai;
     } else {
         tmpBuffer.length = strlen(nai);
     }
