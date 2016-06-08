@@ -221,6 +221,9 @@ export SAML_EC_IDP='https://idp.protectnetwork.org/protectnetwork-idp/profile/SA
 
 ## Using with OpenSSH for User Authentication
 
+[Download and install](https://wiki.moonshot.ja.net/display/Moonshot/Install+Moonshot+Libraries+on+a+Client) the
+[Moonshot Identity Selector](https://wiki.moonshot.ja.net/display/Moonshot/The+Moonshot+Identity+Selector).
+
 Download and install latest krb5 (>= 1.10) from http://web.mit.edu/kerberos/
 
 ```
@@ -248,7 +251,7 @@ Download and install Project Moonshot OpenSSH
 ```
 git clone http://www.project-moonshot.org/git/openssh.git
 cd openssh/
-./configure --prefix=$HOME/openssh-moonshot --with-kerberos5=$HOME/krb5-install
+./configure --prefix=$HOME/openssh-moonshot --with-kerberos5=$HOME/krb5-install --with-libmoonshot
 make install
 ```
 
@@ -257,12 +260,6 @@ NOTE: If krb5 version is too old, compiler errors would look like:
 ```
 undefined reference to `gss_pname_to_uid'
 undefined reference to `gss_userok'
-```
-
-Put your username/password with the IdP in `~/.gss_eap_id`, like:
-```
-username
-password
 ```
 
 Enable GSSAPI, disable Privilege Separation in `openssh-moonshot/etc/sshd_config`:
@@ -283,7 +280,16 @@ Run Server as root:
 # ./sshd -p 2222 -ddd -r
 ```
 
-Run Client:
+If using the Moonshot Identity Selector, [add an identity with your IdP username and password to
+it](https://wiki.moonshot.ja.net/display/Moonshot/User+Guide#UserGuide-AddinganIdentity)
+
+Otherwise, put your IdP username/password in `~/.gss_eap_id`, like:
+```
+username
+password
+```
+
+Run Client: (if using the Moonshot Identity Selector, this must be run in a graphical environment)
 ```
 $ # First set IdP as shown next
 $ export SAML_EC_IDP=https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP
