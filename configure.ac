@@ -66,5 +66,6 @@ LIBXML_CFLAGS=`xml2-config --cflags`
 AC_SUBST([LIBXML_LIBS])
 AC_SUBST([LIBXML_CFLAGS])
 
+AX_CHECK_LIBMOONSHOT
 AC_CONFIG_FILES([Makefile mech_saml_ec/Makefile gss-sample/Makefile])
 AC_OUTPUT

@@ -139,7 +139,14 @@ mech_saml_ec_la_SOURCES +=				\
 	release_any_name_mapping.c		\
 	set_name_attribute.c			\
 	util_attr.cpp				\
-	util_base64.c				
+	util_base64.c
+
+if LIBMOONSHOT
+mech_saml_ec_la_SOURCES += util_moonshot.c
+mech_saml_ec_la_CFLAGS  += @LIBMOONSHOT_CFLAGS@
+mech_saml_ec_la_LDFLAGS += @LIBMOONSHOT_LDFLAGS@
+mech_saml_ec_la_LIBADD  += @LIBMOONSHOT_LIBS@
+endif
 
 if OPENSAML
 mech_saml_ec_la_SOURCES += util_saml.cpp

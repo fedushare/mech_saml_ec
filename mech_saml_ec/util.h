@@ -569,7 +569,7 @@ libMoonshotResolveDefaultIdentity(OM_uint32 *minor,
 OM_uint32
 libMoonshotResolveInitiatorCred(OM_uint32 *minor,
                                 gss_cred_id_t cred,
-                                const gss_name_t targetName);
+                                gss_const_name_t targetName);
 
 /* util_name.c */
 #define EXPORT_NAME_FLAG_OID                    0x1
