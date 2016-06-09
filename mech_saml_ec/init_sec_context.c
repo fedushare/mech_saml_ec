@@ -788,7 +788,8 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 req_flags,
                  gss_channel_bindings_t input_chan_bindings,
                  gss_buffer_t request, gss_buffer_t response)
 {
-    char *idp = getenv(SAML_EC_IDP);
+    gss_cred_id_t cred = ctx->cred;
+    char *idp;
     xmlDocPtr doc_from_sp = NULL;
     xmlDocPtr doc_from_idp = NULL;
     xmlNode *header_from_sp = NULL;
@@ -803,6 +804,12 @@ processSAMLRequest(OM_uint32 *minor, gss_ctx_id_t ctx, OM_uint32 req_flags,
     gss_buffer_desc response_from_idp = {0, NULL};
     OM_uint32 major = GSS_S_COMPLETE;
     OM_uint32 tmpMinor = 0;
+
+    if (cred->ecpSsoLocation.value == NULL) {
+        idp = getenv(SAML_EC_IDP);
+    } else {
+        idp = cred->ecpSsoLocation.value;
+    }
 
     if (MECH_SAML_EC_DEBUG)
         fprintf(stdout, "IdP IS (%s)\n", idp?:"");

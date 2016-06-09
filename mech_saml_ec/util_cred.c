@@ -98,6 +98,7 @@ gssEapReleaseCred(OM_uint32 *minor, gss_cred_id_t *pCred)
     zeroAndReleasePassword(&cred->deleg_assertions);
 #endif
 
+    gss_release_buffer(&tmpMinor, &cred->ecpSsoLocation);
     gss_release_buffer(&tmpMinor, &cred->radiusConfigFile);
     gss_release_buffer(&tmpMinor, &cred->radiusConfigStanza);
     gss_release_buffer(&tmpMinor, &cred->caCertificate);

@@ -281,12 +281,17 @@ Run Server as root:
 ```
 
 If using the Moonshot Identity Selector, [add an identity with your IdP username and password to
-it](https://wiki.moonshot.ja.net/display/Moonshot/User+Guide#UserGuide-AddinganIdentity)
+it](https://wiki.moonshot.ja.net/display/Moonshot/User+Guide#UserGuide-AddinganIdentity). In the issuer field,
+put your IdP's ECP single sign on service's location (ex. https://idp.example.com/idp/profile/SAML2/SOAP/ECP).
 
 Otherwise, put your IdP username/password in `~/.gss_eap_id`, like:
 ```
 username
 password
+```
+and set an environment variable with your IdP's ECP single sign on service's location:
+```
+export SAML_EC_IDP="https://idp.example.com/idp/profile/SAML2/SOAP/ECP"
 ```
 
 Run Client: (if using the Moonshot Identity Selector, this must be run in a graphical environment)

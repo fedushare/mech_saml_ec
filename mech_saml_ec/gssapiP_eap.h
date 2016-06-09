@@ -154,6 +154,7 @@ struct gss_cred_id_struct
 #endif
     gss_OID_set mechanisms;
     time_t expiryTime;
+    gss_buffer_desc ecpSsoLocation;
     gss_buffer_desc radiusConfigFile;
     gss_buffer_desc radiusConfigStanza;
     gss_buffer_desc caCertificate;
