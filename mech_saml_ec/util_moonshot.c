@@ -81,6 +81,7 @@ libMoonshotResolveDefaultIdentity(OM_uint32 *minor,
     gss_name_t name = GSS_C_NO_NAME;
     gss_buffer_desc tmpBuffer = GSS_C_EMPTY_BUFFER;
     char *nai = NULL;
+    char *issuer = NULL;
     char *password = NULL;
     char *serverCertificateHash = NULL;
     char *caCertificate = NULL;
@@ -107,9 +108,10 @@ libMoonshotResolveDefaultIdentity(OM_uint32 *minor,
     }
 
     tmpBuffer.value = nai;
-    if (strrchr(nai, '@')) {
-        tmpBuffer.length = strrchr(nai, '@') - nai;
-        makeStringBuffer(minor, strrchr(nai, '@') + 1, &cred->ecpSsoLocation);
+    issuer = strrchr(nai, '@');
+    if (issuer) {
+        tmpBuffer.length = issuer - nai;
+        makeStringBuffer(minor, issuer + 1, &cred->ecpSsoLocation);
     } else {
         tmpBuffer.length = strlen(nai);
     }
@@ -154,6 +156,7 @@ libMoonshotResolveInitiatorCred(OM_uint32 *minor,
     gss_buffer_desc target = GSS_C_EMPTY_BUFFER;
     gss_buffer_desc tmpBuffer = GSS_C_EMPTY_BUFFER;
     char *nai = NULL;
+    char *issuer = NULL;
     char *password = NULL;
     char *serverCertificateHash = NULL;
     char *caCertificate = NULL;
@@ -190,9 +193,10 @@ libMoonshotResolveInitiatorCred(OM_uint32 *minor,
     gssEapReleaseName(&tmpMinor, &cred->name);
 
     tmpBuffer.value = nai;
-    if (strrchr(nai, '@')) {
-        tmpBuffer.length = strrchr(nai, '@') - nai;
-        makeStringBuffer(minor, strrchr(nai, '@') + 1, &cred->ecpSsoLocation);
+    issuer = strrchr(nai, '@');
+    if (issuer) {
+        tmpBuffer.length = issuer - nai;
+        makeStringBuffer(minor, issuer + 1, &cred->ecpSsoLocation);
     } else {
         tmpBuffer.length = strlen(nai);
     }
