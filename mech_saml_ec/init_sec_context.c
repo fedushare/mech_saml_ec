@@ -414,6 +414,7 @@ initBegin(OM_uint32 *minor,
     if (GSS_ERROR(major))
         return major;
 
+#ifdef MECH_EAP
     if (target != GSS_C_NO_NAME) {
         GSSEAP_MUTEX_LOCK(&target->mutex);
 
@@ -435,6 +436,7 @@ initBegin(OM_uint32 *minor,
                                   &ctx->mechanismUsed);
     if (GSS_ERROR(major))
         return major;
+#endif
 
     /* If credentials were provided, check they're usable with this mech */
     if (!gssEapCredAvailable(cred, ctx->mechanismUsed)) {
@@ -1474,6 +1476,9 @@ gssEapInitSecContext(OM_uint32 *minor,
     OM_uint32 major, tmpMinor;
     int initialContextToken = (ctx->mechanismUsed == GSS_C_NO_OID);
 
+#ifndef MECH_EAP
+    if (ctx->state == GSSEAP_STATE_ACQUIRE) {
+#endif
     /*
      * XXX is acquiring the credential lock here necessary? The password is
      * mutable but the contract could specify that this is not updated whilst
@@ -1501,11 +1506,18 @@ gssEapInitSecContext(OM_uint32 *minor,
     GSSEAP_ASSERT(ctx->cred->flags & CRED_FLAG_RESOLVED);
     GSSEAP_ASSERT(ctx->cred->flags & CRED_FLAG_INITIATE);
 
+
+#ifdef MECH_EAP
     if (initialContextToken) {
+#endif
         major = initBegin(minor, ctx, target_name, mech_type,
                           req_flags, time_req, input_chan_bindings);
         if (GSS_ERROR(major))
             goto cleanup;
+
+#ifndef MECH_EAP
+        ctx->state = GSSEAP_STATE_AUTHENTICATE;
+#endif
     }
 
 #ifdef MECH_EAP
@@ -1523,6 +1535,28 @@ gssEapInitSecContext(OM_uint32 *minor,
                          sizeof(eapGssInitiatorSm) / sizeof(eapGssInitiatorSm[0]));
 #else
     if (initialContextToken) {
+        if (target_name != GSS_C_NO_NAME) {
+            GSSEAP_MUTEX_LOCK(&target_name->mutex);
+
+            major = gssEapDuplicateName(minor, target_name, &ctx->acceptorName);
+            if (GSS_ERROR(major)) {
+                GSSEAP_MUTEX_UNLOCK(&target_name->mutex);
+                goto cleanup;
+            }
+            if (MECH_SAML_EC_DEBUG)
+                fprintf(stdout, "TARGET NAME IS (%.*s)\n",
+                        target_name->username.length,  (char *)(target_name->username.value));
+
+            GSSEAP_MUTEX_UNLOCK(&target_name->mutex);
+        }
+
+        major = gssEapCanonicalizeOid(minor,
+                                      mech_type,
+                                      OID_FLAG_NULL_VALID | OID_FLAG_MAP_NULL_TO_DEFAULT_MECH,
+                                      &ctx->mechanismUsed);
+        if (GSS_ERROR(major))
+            goto cleanup;
+
         gss_buffer_desc innerToken = GSS_C_EMPTY_BUFFER;
 
         /* Holder-of-key (HOK) not supported yet */
@@ -1549,9 +1583,9 @@ gssEapInitSecContext(OM_uint32 *minor,
                    output_token);
         if (major == GSS_S_COMPLETE) {
             major = GSS_S_CONTINUE_NEEDED;
-            ctx->state = GSSEAP_STATE_AUTHENTICATE;
+            ctx->state = GSSEAP_STATE_ACQUIRE;
         }
-    } else {
+    } else if (ctx->state == GSSEAP_STATE_AUTHENTICATE){
         major = processSAMLRequest(minor, ctx, req_flags, input_chan_bindings,
                                      input_token, output_token);
         if (major != GSS_S_COMPLETE) {
