@@ -40,6 +40,7 @@
 # include <shlobj.h>     /* may need to use ShFolder.h instead */
 #else
 # include <pwd.h>
+# include <termios.h>
 #endif
 
 OM_uint32
@@ -224,29 +225,39 @@ promptForCredentials(OM_uint32 *minor,
 
     printf("Username? ");
     if (fgets(username, 1024, stdin) == NULL) {
-      major = GSS_S_CRED_UNAVAIL;
-      *minor = GSSEAP_NO_DEFAULT_CRED;
-      goto cleanup;
+        major = GSS_S_CRED_UNAVAIL;
+        *minor = GSSEAP_NO_DEFAULT_CRED;
+        goto cleanup;
     } else {
-      // Remove newline
-      char *pos;
-      if ((pos = strchr(username, '\n')) != NULL) {
-          *pos = '\0';
-      }
+        // Remove newline
+        char *pos;
+        if ((pos = strchr(username, '\n')) != NULL) {
+            *pos = '\0';
+        }
     }
 
     printf("Password? ");
+#ifndef WIN32
+    struct termios old_ti, new_ti;
+    tcgetattr(STDIN_FILENO, &old_ti);
+    new_ti = old_ti;
+    new_ti.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_ti);
+#endif
     if (fgets(password, 1024, stdin) == NULL) {
-      major = GSS_S_CRED_UNAVAIL;
-      *minor = GSSEAP_NO_DEFAULT_CRED;
-      goto cleanup;
+        major = GSS_S_CRED_UNAVAIL;
+        *minor = GSSEAP_NO_DEFAULT_CRED;
+        goto cleanup;
     } else {
-      // Remove newline
-      char *pos;
-      if ((pos = strchr(password, '\n')) != NULL) {
-          *pos = '\0';
-      }
+        // Remove newline
+        char *pos;
+        if ((pos = strchr(password, '\n')) != NULL) {
+            *pos = '\0';
+        }
     }
+#ifndef WIN32
+  tcsetattr(STDIN_FILENO, TCSANOW, &old_ti);
+#endif
 
     makeStringBuffer(minor, username, defaultIdentity);
     makeStringBuffer(minor, password, defaultPassword);
