@@ -43,6 +43,8 @@
 # include <termios.h>
 #endif
 
+#define SAML_EC_IDP		"SAML_EC_IDP"
+
 OM_uint32
 gssEapAllocCred(OM_uint32 *minor, gss_cred_id_t *pCred)
 {
@@ -223,6 +225,7 @@ promptForCredentials(OM_uint32 *minor,
     char username[1024];
     char password[1024];
 
+    printf("Enter credentials for %s\n", getenv(SAML_EC_IDP));
     printf("Username? ");
     if (fgets(username, 1024, stdin) == NULL) {
         major = GSS_S_CRED_UNAVAIL;
