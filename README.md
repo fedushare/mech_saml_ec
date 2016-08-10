@@ -327,7 +327,7 @@ IdP interprets as using a `null` URL scheme), add the following to `$IDP_HOME/co
 ## Acknowledgements
 
 Development of this software was supported in part by a gift from the
-[Internet Society](www.internetsociety.org).
+[Internet Society](https://www.internetsociety.org).
 
 This material is based upon work supported by the [National Science Foundation](http://www.nsf.gov/) under grant number 1440609.
 Any opinions, findings, and conclusions or recommendations expressed in this material are those of the authors and do not necessarily reflect the views of the United States Government or any agency thereof.
