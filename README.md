@@ -1,6 +1,6 @@
 This is an open source implementation of https://tools.ietf.org/html/draft-ietf-kitten-sasl-saml-ec
 
-View and report issues at: https://github.com/jbasney/mech_saml_ec/issues
+View and report issues at: https://github.com/fedushare/mech_saml_ec/issues
 
 Discuss at: https://groups.google.com/d/forum/saml-ec-gssapi-dev
 
