@@ -329,5 +329,5 @@ IdP interprets as using a `null` URL scheme), add the following to `$IDP_HOME/co
 Development of this software was supported in part by a gift from the
 [Internet Society](https://www.internetsociety.org).
 
-This material is based upon work supported by the [National Science Foundation](http://www.nsf.gov/) under grant number 1440609.
+This material is based upon work supported by the [National Science Foundation](https://www.nsf.gov/) under grant number [1440609](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1440609).
 Any opinions, findings, and conclusions or recommendations expressed in this material are those of the authors and do not necessarily reflect the views of the United States Government or any agency thereof.
