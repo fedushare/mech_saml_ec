@@ -691,7 +691,8 @@ enum gss_eap_state {
     GSSEAP_STATE_ALL            = 0x3F
 #else
     GSSEAP_STATE_ESTABLISHED    = 0x04,     /* context established */
-    GSSEAP_STATE_ALL            = 0x07
+    GSSEAP_STATE_ACQUIRE        = 0x08,     /* acquire credential */
+    GSSEAP_STATE_ALL            = 0x0F
 #endif
 };
 

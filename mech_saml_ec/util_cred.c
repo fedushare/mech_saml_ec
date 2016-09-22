@@ -40,7 +40,10 @@
 # include <shlobj.h>     /* may need to use ShFolder.h instead */
 #else
 # include <pwd.h>
+# include <termios.h>
 #endif
+
+#define SAML_EC_IDP		"SAML_EC_IDP"
 
 OM_uint32
 gssEapAllocCred(OM_uint32 *minor, gss_cred_id_t *pCred)
@@ -200,6 +203,85 @@ cleanup:
     }
 
     memset(buf, 0, sizeof(buf));
+
+    return major;
+}
+
+static OM_uint32
+promptForCredentials(OM_uint32 *minor,
+                     gss_buffer_t defaultIdentity,
+                     gss_buffer_t defaultPassword)
+{
+    OM_uint32 major, tmpMinor;
+
+    defaultIdentity->length = 0;
+    defaultIdentity->value = NULL;
+
+    if (defaultPassword != GSS_C_NO_BUFFER) {
+        defaultPassword->length = 0;
+        defaultPassword->value = NULL;
+    }
+
+    char username[1024];
+    char password[1024];
+
+    printf("Enter credentials for %s\n", getenv(SAML_EC_IDP));
+    printf("Username? ");
+    if (fgets(username, 1024, stdin) == NULL) {
+        major = GSS_S_CRED_UNAVAIL;
+        *minor = GSSEAP_NO_DEFAULT_CRED;
+        goto cleanup;
+    } else {
+        // Remove newline
+        char *pos;
+        if ((pos = strchr(username, '\n')) != NULL) {
+            *pos = '\0';
+        }
+    }
+
+    printf("Password? ");
+#ifndef WIN32
+    struct termios old_ti, new_ti;
+    tcgetattr(STDIN_FILENO, &old_ti);
+    new_ti = old_ti;
+    new_ti.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_ti);
+#endif
+    if (fgets(password, 1024, stdin) == NULL) {
+        major = GSS_S_CRED_UNAVAIL;
+        *minor = GSSEAP_NO_DEFAULT_CRED;
+        goto cleanup;
+    } else {
+        // Remove newline
+        char *pos;
+        if ((pos = strchr(password, '\n')) != NULL) {
+            *pos = '\0';
+        }
+    }
+#ifndef WIN32
+  tcsetattr(STDIN_FILENO, TCSANOW, &old_ti);
+#endif
+
+    makeStringBuffer(minor, username, defaultIdentity);
+    makeStringBuffer(minor, password, defaultPassword);
+
+    memset(password, 0, sizeof(password));
+
+    if (defaultIdentity->length == 0) {
+        major = GSS_S_CRED_UNAVAIL;
+        *minor = GSSEAP_NO_DEFAULT_CRED;
+        goto cleanup;
+    }
+
+    major = GSS_S_COMPLETE;
+    *minor = 0;
+
+cleanup:
+
+    if (GSS_ERROR(major)) {
+        gss_release_buffer(&tmpMinor, defaultIdentity);
+        zeroAndReleasePassword(defaultPassword);
+    }
 
     return major;
 }
@@ -754,6 +836,58 @@ cleanup:
 }
 
 static OM_uint32
+promptResolveInitiatorCred(OM_uint32 *minor, gss_cred_id_t cred)
+{
+    OM_uint32 major, tmpMinor;
+    gss_buffer_desc defaultIdentity = GSS_C_EMPTY_BUFFER;
+    gss_name_t defaultIdentityName = GSS_C_NO_NAME;
+    gss_buffer_desc defaultPassword = GSS_C_EMPTY_BUFFER;
+    int isDefaultIdentity = 0;
+
+    major = promptForCredentials(minor, &defaultIdentity, &defaultPassword);
+    if (GSS_ERROR(major))
+        goto cleanup;
+
+    major = gssEapImportName(minor, &defaultIdentity, GSS_C_NT_USER_NAME,
+                             gssEapPrimaryMechForCred(cred), &defaultIdentityName);
+    if (GSS_ERROR(major))
+        goto cleanup;
+
+    if (defaultIdentityName == GSS_C_NO_NAME) {
+        if (cred->name == GSS_C_NO_NAME) {
+            major = GSS_S_CRED_UNAVAIL;
+            *minor = GSSEAP_NO_DEFAULT_IDENTITY;
+            goto cleanup;
+        }
+    } else {
+        if (cred->name == GSS_C_NO_NAME) {
+            cred->name = defaultIdentityName;
+            defaultIdentityName = GSS_C_NO_NAME;
+            isDefaultIdentity = 1;
+        } else {
+            major = gssEapCompareName(minor, cred->name,
+                                      defaultIdentityName, &isDefaultIdentity);
+            if (GSS_ERROR(major))
+                goto cleanup;
+        }
+    }
+
+    if (isDefaultIdentity &&
+        (cred->flags & CRED_FLAG_PASSWORD) == 0) {
+        major = gssEapSetCredPassword(minor, cred, &defaultPassword);
+        if (GSS_ERROR(major))
+            goto cleanup;
+    }
+
+cleanup:
+    gssEapReleaseName(&tmpMinor, &defaultIdentityName);
+    zeroAndReleasePassword(&defaultPassword);
+    gss_release_buffer(&tmpMinor, &defaultIdentity);
+
+    return major;
+}
+
+static OM_uint32
 staticIdentityFileResolveInitiatorCred(OM_uint32 *minor, gss_cred_id_t cred)
 {
     OM_uint32 major, tmpMinor;
@@ -847,6 +981,9 @@ gssEapResolveInitiatorCred(OM_uint32 *minor,
         if (major == GSS_S_CRED_UNAVAIL)
 #endif
             major = staticIdentityFileResolveInitiatorCred(minor, resolvedCred);
+        if (major == GSS_S_CRED_UNAVAIL) {
+            major = promptResolveInitiatorCred(minor, resolvedCred);
+        }
         if (GSS_ERROR(major) && major != GSS_S_CRED_UNAVAIL)
             goto cleanup;
 
