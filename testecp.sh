@@ -13,10 +13,23 @@
 userid=$LOGNAME
 
 # idpid = your idp entity id
-idpid="urn:mace:incommon:uiuc.edu"
-
 # ecpurl = your idp's ECP URL
-ecpurl="https://shibboleth.illinois.edu/idp/profile/SAML2/SOAP/ECP"
+
+# ProtectNetwork
+idpid="urn:mace:incommon:idp.protectnetwork.org"
+ecpurl="https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP"
+
+# UIUC
+#idpid="urn:mace:incommon:uiuc.edu"
+#ecpurl="https://shibboleth.illinois.edu/idp/profile/SAML2/SOAP/ECP"
+
+# NCSA
+#idpid="https://idp.ncsa.illinois.edu/idp/shibboleth"
+#ecpurl="https://idp.ncsa.illinois.edu/idp/profile/SAML2/SOAP/ECP"
+
+# LIGO
+#idpid="https://login.ligo.org/idp/shibboleth"
+#ecpurl="https://login.ligo.org/idp/profile/SAML2/SOAP/ECP"
 
 # rpid = a valid SP entityId that is configured for ECP
 rpid="https://cilogon.org/shibboleth"
