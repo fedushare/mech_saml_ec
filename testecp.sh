@@ -31,6 +31,18 @@ ecpurl="https://idp.protectnetwork.org/protectnetwork-idp/profile/SAML2/SOAP/ECP
 #idpid="https://login.ligo.org/idp/shibboleth"
 #ecpurl="https://login.ligo.org/idp/profile/SAML2/SOAP/ECP"
 
+# Clemson
+#idpid="https://idp.clemson.edu/idp/shibboleth"
+#ecpurl="https://idp.clemson.edu/idp/profile/SAML2/SOAP/ECP"
+
+# Utah
+#idpid="urn:mace:incommon:utah.edu"
+#ecpurl="https://incommon2.sso.utah.edu/idp/profile/SAML2/SOAP/ECP"
+
+# UChicago
+#idpid="urn:mace:incommon:uchicago.edu"
+#ecpurl="https://shibboleth2.uchicago.edu/idp/profile/SAML2/SOAP/ECP"
+
 # rpid = a valid SP entityId that is configured for ECP
 rpid="https://cilogon.org/shibboleth"
 
